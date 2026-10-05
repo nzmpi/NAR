@@ -3,25 +3,50 @@ pragma solidity 0.8.36;
 
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 
+/**
+ * @title Vault
+ * @author https://github.com/nzmpi
+ * @notice A simple Vault contract
+ */
 contract Vault {
     using SafeTransferLib for address;
 
-    address public immutable factory;
-    bytes32 public immutable salt;
+    /// @notice The address of the Factory contract
+    address public immutable FACTORY;
+    /// @notice The salt of the Vault
+    bytes32 public immutable SALT;
 
-    constructor(bytes32 _salt) payable {
-        factory = msg.sender;
-        salt = _salt;
-    }
-
-    modifier onlyFactory() {
-        require(msg.sender == factory, NotFactory());
-        _;
-    }
+    /**
+     * @notice Emitted when a native token is transfered
+     * @param to - The address the tokens are transfered to
+     * @param amount - The amount of tokens transfered
+     */
+    event NativeTransfered(address indexed to, uint256 amount);
 
     error InvalidData();
     error NotFactory();
 
+    modifier onlyFactory() {
+        require(msg.sender == FACTORY, NotFactory());
+        _;
+    }
+
+    /**
+     * @notice Initializes the Vault contract
+     * @param salt - The salt of the Vault
+     */
+    constructor(bytes32 salt) payable {
+        FACTORY = msg.sender;
+        SALT = salt;
+    }
+
+    /**
+     * @notice Transfers tokens to the specified address
+     * @notice Can only be called by the Factory
+     * @param to - The address the tokens are transfered to
+     * @param tokens - The addresses of the tokens
+     * @param amounts - The amounts of the tokens
+     */
     function transfer(address to, address[] calldata tokens, uint256[] calldata amounts) external onlyFactory {
         uint256 len = tokens.length;
         require(len == amounts.length, InvalidData());
@@ -31,7 +56,13 @@ contract Vault {
         }
     }
 
+    /**
+     * @notice Transfers all native tokens to the specified address
+     * @notice Can only be called by the Factory
+     * @param to - The address the tokens are transfered to
+     */
     function transferNative(address to) external onlyFactory {
+        emit NativeTransfered(to, address(this).balance);
         to.safeTransferETH(address(this).balance);
     }
 }
