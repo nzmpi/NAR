@@ -47,6 +47,9 @@ contract FactoryTest is Test {
         factory.deploy(salt);
 
         vm.startPrank(user1);
+        vm.expectRevert(IFactory.ZeroSalt.selector);
+        factory.deploy(bytes32(0));
+
         assertEq(factory.getVault(salt), address(0), "Wrong initial vault address from salt");
         assertEq(factory.getSalt(expectedAddress), bytes32(0), "Wrong initial salt from vault");
         vm.expectEmit(true, true, true, true);

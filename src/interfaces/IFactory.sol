@@ -26,11 +26,12 @@ interface IFactory {
      */
     event VaultCreated(address indexed vault, bytes32 indexed salt);
 
-    error ZeroAddress();
     error NotOwner();
     error NotPendingOwner(address pendingOwner);
-    error VaultExists();
     error VaultDoesNotExist();
+    error VaultExists();
+    error ZeroAddress();
+    error ZeroSalt();
 
     /**
      * @notice Deploys a new vault

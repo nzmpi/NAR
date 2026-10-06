@@ -119,6 +119,7 @@ contract Factory layout at erc7201("nar.storage.factory") is IFactory, Initializ
      */
     function _deploy(bytes32 _salt) internal returns (Vault) {
         require(_vaults[_salt] == address(0), VaultExists());
+        if (_salt == bytes32(0)) revert ZeroSalt();
         address vault = address(new Vault{salt: _salt}(_salt));
         _vaults[_salt] = vault;
         _salts[vault] = _salt;
