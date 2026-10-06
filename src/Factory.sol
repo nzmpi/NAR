@@ -34,7 +34,7 @@ contract Factory layout at erc7201("nar.storage.factory") is IFactory, Initializ
      * @param owner The initial owner.
      */
     function initialize(address owner) external payable initializer {
-        if (_owner == address(0)) revert ZeroAddress();
+        if (owner == address(0)) revert ZeroAddress();
         _owner = owner;
         emit OwnershipTransferred(address(0), owner);
     }
@@ -56,8 +56,17 @@ contract Factory layout at erc7201("nar.storage.factory") is IFactory, Initializ
     }
 
     /// @inheritdoc IFactory
+    function transfer(address vault, address to, address[] calldata tokens, uint256[] calldata amounts)
+        external
+        onlyOwner
+    {
+        if (_salts[vault] == bytes32(0)) revert VaultDoesNotExist();
+        Vault(vault).transfer(to, tokens, amounts);
+    }
+
+    /// @inheritdoc IFactory
     function transferNative(address vault, address to) external onlyOwner {
-        if (_salts[vault] == bytes32(0)) revert VaultDoesNotExists();
+        if (_salts[vault] == bytes32(0)) revert VaultDoesNotExist();
         Vault(vault).transferNative(to);
     }
 
@@ -99,7 +108,7 @@ contract Factory layout at erc7201("nar.storage.factory") is IFactory, Initializ
     }
 
     /// @inheritdoc IFactory
-    function version() external pure returns (string memory) {
+    function getVersion() external pure returns (string memory) {
         return _VERSION;
     }
 

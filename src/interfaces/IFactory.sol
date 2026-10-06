@@ -30,7 +30,7 @@ interface IFactory {
     error NotOwner();
     error NotPendingOwner(address pendingOwner);
     error VaultExists();
-    error VaultDoesNotExists();
+    error VaultDoesNotExist();
 
     /**
      * @notice Deploys a new vault
@@ -51,6 +51,15 @@ interface IFactory {
     function deployAndTransfer(bytes32 salt, address to, address[] calldata tokens, uint256[] calldata amounts)
         external
         returns (address vault);
+    /**
+     * @notice Transfers tokens to the specified address
+     * @param vault - The address of the vault
+     * @param to - The address to transfer the tokens to
+     * @param tokens - The tokens to transfer
+     * @param amounts - The amounts to transfer
+     * @notice The caller must be the owner
+     */
+    function transfer(address vault, address to, address[] calldata tokens, uint256[] calldata amounts) external;
     /**
      * @notice Transfers native tokens to the specified address
      * @param vault - The address of the vault
@@ -96,5 +105,5 @@ interface IFactory {
      * @notice Returns the version of the contract
      * @return version - The version of the contract
      */
-    function version() external pure returns (string memory);
+    function getVersion() external pure returns (string memory);
 }
