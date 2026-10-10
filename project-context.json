@@ -1,0 +1,197 @@
+{
+  "project": {
+    "name": "NAR Telegram trading pool",
+    "purpose": "A Telegram Mini App and bot for a private group to deposit stablecoins into deterministic per-user vaults, receive pooled manual trading returns, and request manual withdrawals.",
+    "status": "planning",
+    "maintenance": "Update this file only when the user explicitly asks for an update."
+  },
+  "scope": {
+    "launch": "Private family-and-friends use initially.",
+    "chains": [
+      "Polygon",
+      "Base",
+      "BNB Chain"
+    ],
+    "assets": [
+      "USDT",
+      "USDC",
+      "DAI"
+    ],
+    "valuation": "All supported stablecoins are accounted as 1 USD for now. A depeg is handled manually during withdrawal.",
+    "minimum_deposit_usd": 50,
+    "minimum_withdrawal_usd": 50
+  },
+  "identity_and_vaults": {
+    "telegram_identity": "The backend validates Telegram Mini App initData and maps Telegram's stable numeric user ID to an internal user ID. Do not use initDataUnsafe as a trusted identity source.",
+    "vault_model": "Each user has deterministic Vault contracts deployed by the Factory. A user may have multiple vaults through a per-user nonce.",
+    "salt": "Derive the CREATE2 salt from internalUserId and vaultNonce; do not expose or rely directly on the Telegram user ID.",
+    "cross_chain_address_requirement": "The Factory address, Vault creation bytecode, and salt must match across chains for a user's vault address to match across chains. Token choice must not affect the vault address.",
+    "deposit_method": "Users send ERC-20 tokens directly to a displayed vault address or QR code. They do not call a vault deposit function."
+  },
+  "contracts": {
+    "factory": "src/Factory.sol",
+    "vault": "src/Vault.sol",
+    "proxy": "src/ProxyBase.sol",
+    "control": {
+      "factory_owner": "Separate multisig; deploys vaults and manually sweeps vault tokens.",
+      "proxy_admin": "A different multisig; controls Factory upgrades.",
+      "treasury": "No onchain configured treasury. The factory owner supplies the destination for each manual sweep."
+    },
+    "vault_behavior": "Vaults accept direct ERC-20 transfers. Only the Factory can transfer ERC-20 or native balances out.",
+    "known_contract_decisions": [
+      "Zero salt deployment was fixed by the user.",
+      "Vaults are persistent; selfdestruct is not part of this design.",
+      "The backend credits only configured token-contract addresses per chain; unapproved tokens sent to a vault are not credited.",
+      "Contracts remain unchanged for now; sweep events and recipient-address checks are deferred hardening work."
+    ]
+  },
+  "deposit_lifecycle": {
+    "states": [
+      "intent",
+      "transfer_detected",
+      "pending_review",
+      "swept_and_confirmed",
+      "rejected"
+    ],
+    "flow": [
+      "User selects chain, token, intended amount, and lock tier in the Mini App.",
+      "The Mini App shows the user's vault address and QR code.",
+      "User transfers a stablecoin directly to the vault and confirms they sent it.",
+      "Backend scans the known vault for configured-token transfer events; if it cannot match one, it asks the user for the transaction hash.",
+      "The transfer remains pending until the operator sweeps and confirms the amount.",
+      "A successful sweep activates the position."
+    ],
+    "deposit_identity": "Use chainId + transactionHash + logIndex. A transaction can contain multiple relevant token transfers.",
+    "confirmation_policy": "No fixed block-confirmation delay. A transfer is pending until the manual sweep succeeds; an unavailable or reorganized transfer cannot become active.",
+    "earning_start": "A position begins earning and its lock begins only when the sweep/confirmation succeeds. The source transfer timestamp is retained as evidence only.",
+    "intent_expiry": "Deposit intents expire after 24 hours. They snapshot the exact selected chain and whitelisted token contract address.",
+    "minimum_and_topups": "The minimum is 50 USD. A below-minimum intent can accumulate multiple verified transfers of the same configured token on the same chain until it reaches the minimum.",
+    "counterfactual_vaults": "The user may receive and send to a deterministic counterfactual vault address before the vault is deployed. The admin deploys the vault through the multisig before sweeping and confirming it.",
+    "unmatched_transfers": "A supported incoming transfer without an intent enters manual matching; it is never auto-credited.",
+    "amount_mismatch": "When received amount differs from intent, the user must approve the confirmed actual amount before activation. The UI warns that an incorrect amount may lead to loss of funds.",
+    "token_warning": "The app displays the exact accepted token-contract address. Other tokens are not credited and may be unrecoverable."
+  },
+  "portfolio_model": {
+    "per_user": "Each Telegram user has exactly one combined portfolio in one pooled strategy.",
+    "chains_and_vaults": "Chains, vaults, and stablecoins are deposit and withdrawal routes only; they do not create separate user portfolios."
+  },
+  "positions_and_locks": {
+    "tiers": [
+      {
+        "tier": 0,
+        "label": "Liquid",
+        "targetApr": 0.06,
+        "rewardWeight": 1.0
+      },
+      {
+        "tier": 1,
+        "label": "1 month",
+        "targetApr": 0.08,
+        "rewardWeight": 1.3333333333
+      },
+      {
+        "tier": 2,
+        "label": "2 months",
+        "targetApr": 0.09,
+        "rewardWeight": 1.5
+      },
+      {
+        "tier": 3,
+        "label": "3 months",
+        "targetApr": 0.1,
+        "rewardWeight": 1.6666666667
+      }
+    ],
+    "meaning": "Target APRs are relative weights for distributing actual profit, never guaranteed returns.",
+    "maturity": "At lock expiry, a position automatically becomes tier 0. It keeps its accrued yield and earns future dividends at the liquid weight.",
+    "extension": "An active lock can only extend to a longer tier. The old position's principal plus accrued yield becomes principal in a new position with a new lock start, higher-tier weight, and no fee.",
+    "compounding": "A user can create a new lock using any amount up to their available principal plus accrued yield. The Max action uses all available value."
+  },
+  "dividends_and_losses": {
+    "ledger_location": "Backend only; dividends are not calculated by the contracts.",
+    "distribution": "Maintain a global cumulative dividend-per-reward-share accumulator. A position stores a reward-share balance and its accumulator checkpoint, so user yield is calculated lazily without recomputing all users on every distribution.",
+    "pnl_entry": "The operator periodically records immutable positive or negative USD P&L entries. Corrections must be new offsetting entries, not edits to history.",
+    "loss_policy": "Negative P&L creates a global loss carryforward. Future positive P&L first clears that carryforward; only the excess becomes a distributable dividend. User principal does not decrease from losses.",
+    "example": "Record -50 USD, then +100 USD: clear 50 USD of loss carryforward and distribute 50 USD by reward shares.",
+    "safety_metric": "Track actual treasury value against user principal and yield liabilities internally.",
+    "entry_fields": "Each P&L entry requires a signed USD amount and short note. Recorded time is system-set; an optional effective date is informational and does not retroactively alter allocations."
+  },
+  "withdrawals": {
+    "processing": "Users submit requests in the Mini App; the operator manually swaps, bridges, and sends the requested stablecoin on the requested supported chain.",
+    "early_locked_withdrawal": "For the withdrawn part of an active lock, cancel its unpaid accrued yield and charge 10% of that withdrawn principal. Pay 90% of withdrawn principal. The fee is credited to a separate admin-fee balance and is not distributed to the pool.",
+    "partial_withdrawal": "Allowed. Split the position logically: the withdrawn portion is closed; the remainder stays on its original lock and retains proportional accrued yield.",
+    "mature_or_liquid_withdrawal": "No early-withdrawal fee; principal and eligible accrued yield can be withdrawn.",
+    "payout_address": "Users enter any valid EVM payout address for each request after selecting a supported chain, stablecoin, and amount. Previously used payout addresses are saved per user and can be selected for convenience.",
+    "reservation": "On explicit user approval, a withdrawal request reserves the requested amount so it cannot be relocked or requested twice. The user can cancel only while the request is pending.",
+    "request_quote": "For any active-lock amount, show the affected position, forfeited yield, 10% early-withdrawal fee, and final payout before user approval. The result is fixed when approved.",
+    "liquidity_order": "Use liquid balance first; the user chooses any locked positions and amounts needed for the remainder.",
+    "admin_outcome": "Admin may reject a request with a user-visible reason. Mark paid only after the outgoing transaction hash is recorded.",
+    "network_fees": "Admin absorbs withdrawal network fees for now.",
+    "history": "Record requested payout chain, token, amount, payout address, status, operator decision, early-withdrawal fee, and outgoing transaction hash."
+  },
+  "mini_app": {
+    "portfolio_summary": [
+      "total balance",
+      "liquid principal",
+      "locked principal",
+      "accrued yield",
+      "pending deposits",
+      "lock status and maturity dates",
+      "weighted target APR",
+      "earned-yield APR",
+      "strategy APR"
+    ],
+    "history_visible_to_user": [
+      "deposits",
+      "relocks",
+      "withdrawals"
+    ],
+    "performance_ranges": [
+      "1 week",
+      "1 month",
+      "3 months",
+      "1 year"
+    ],
+    "performance_rules": "Calculate period yield from retained backend dividend and balance history while adjusting for deposits, withdrawals, relocks, and maturity changes. Earned-yield APR cannot be negative because dividends do not go below zero. Strategy APR can be negative and is annualized period net pool P&L divided by average managed capital.",
+    "landing": "Show selected-period pool strategy APR, the 6-10% target range, and illustrative target-rate projections that state actual returns may be lower or higher based on trading performance and market conditions.",
+    "relocking": "Locks never renew automatically; users choose every new lock manually."
+  },
+  "authentication": {
+    "user_access": "No separate login screen. The Mini App sends Telegram initData to the backend, which validates its signature and uses the verified Telegram user ID to load only that user’s records.",
+    "admin_access": "The separate browser dashboard uses Telegram Login with the bot OpenID Connect flow. The backend validates the Telegram ID token and permits access only when its Telegram user ID is on the admin allowlist. Initially, the allowlist contains only the owner account.",
+    "client_trust_boundary": "Never trust a Telegram ID supplied by the client outside validated Telegram initData."
+  },
+  "admin_dashboard": {
+    "surface": "Separate browser-based dashboard for laptop use.",
+    "functions": [
+      "review and confirm deposits",
+      "record P&L",
+      "record sweeps",
+      "process withdrawal requests",
+      "manage supported assets and user records",
+      "generate Factory deployment and sweep calldata for manual Safe submission",
+      "manage test-environment configuration"
+    ],
+    "authentication": "Telegram Login OpenID Connect. Register the dashboard origin and callback URL in BotFather; validate ID-token signature, issuer, audience, expiration, nonce, and the Telegram user-ID allowlist server-side."
+  },
+  "notifications": {
+    "telegram_events": [
+      "deposit confirmed",
+      "withdrawal paid"
+    ]
+  },
+  "technology": {
+    "frontend": "TypeScript and Next.js Telegram Mini App.",
+    "backend": "TypeScript and Node.js API service.",
+    "database": "PostgreSQL.",
+    "rpc": "Environment-configured endpoints, to be supplied later.",
+    "test_environment": "Use the same bot and codebase with a server-enforced admin-only test environment. It has separate test-chain configuration and database; only the owner Telegram account can use it."
+  },
+  "open_decisions": [
+    "Define the exact database schema.",
+    "Choose the Telegram bot library and hosting platform.",
+    "Define the detailed database schema, API contracts, and operator review screens.",
+    "Design the explicit contract-hardening changes when the user requests them.",
+    "Add donation or vault-sharing features only in a later scope."
+  ]
+}
