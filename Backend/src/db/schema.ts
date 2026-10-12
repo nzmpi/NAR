@@ -241,6 +241,10 @@ export const ledgerEntries = pgTable("ledger_entries", {
         precision: 78,
         scale: 0,
     }).notNull(),
+    amountUsd: numeric("amount_usd", {
+        precision: 78,
+        scale: 0,
+    }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
         .notNull()
         .defaultNow(),

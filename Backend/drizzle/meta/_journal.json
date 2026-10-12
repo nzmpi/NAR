@@ -15,6 +15,20 @@
       "when": 1791757563944,
       "tag": "0001_financial_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791825842436,
+      "tag": "0002_financial_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791845866477,
+      "tag": "0003_ledger_usd_value",
+      "breakpoints": true
     }
   ]
 }
