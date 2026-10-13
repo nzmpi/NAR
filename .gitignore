@@ -11,4 +11,7 @@ Foundry/broadcast/**/dry-run/
 Foundry/docs/
 
 # Dotenv file
-Foundry/.env
+.env
+
+node_modules/
+dist/
