@@ -212,15 +212,20 @@ export async function confirmDeposit(input: ConfirmDepositInput) {
             .returning();
 
         // Record the incoming token and its USD accounting value.
-        await tx.insert(ledgerEntries).values({
-            transactionId: ledgerTransaction.id,
-            assetId: input.assetId,
-            accountType: "pool",
-            userId: input.userId,
-            direction: "credit",
-            amount: amount.toString(),
-            amountUsd: amountUsd.toString(),
-        });
+        await tx.insert(ledgerEntries).values([
+            {
+                transactionId: ledgerTransaction.id,
+                accountType: "pool_assets",
+                direction: "debit",
+                amountUsd: amountUsd.toString(),
+            },
+            {
+                transactionId: ledgerTransaction.id,
+                accountType: "user_liability",
+                direction: "credit",
+                amountUsd: amountUsd.toString(),
+            },
+        ]);
 
         // Record the administrator action.
         await tx.insert(auditLogs).values({

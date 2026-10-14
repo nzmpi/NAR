@@ -231,16 +231,8 @@ export const ledgerEntries = pgTable("ledger_entries", {
     transactionId: uuid("transaction_id")
         .notNull()
         .references(() => ledgerTransactions.id),
-    assetId: uuid("asset_id")
-        .notNull()
-        .references(() => assets.id),
     accountType: text("account_type").notNull(),
-    userId: uuid("user_id").references(() => users.id),
     direction: text("direction").notNull(),
-    amount: numeric("amount", {
-        precision: 78,
-        scale: 0,
-    }).notNull(),
     amountUsd: numeric("amount_usd", {
         precision: 78,
         scale: 0,
