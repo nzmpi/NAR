@@ -87,6 +87,7 @@ export const vaults = pgTable("vaults", {
 // Shares use 18-decimal fixed-point units.
 export const poolStates = pgTable("pool_states", {
     id: uuid("id").primaryKey().defaultRandom(),
+    singletonKey: integer("singleton_key").notNull().default(1).unique(),
     totalAssetsUsd: numeric("total_assets_usd", {
         precision: 78,
         scale: 0,
@@ -231,16 +232,8 @@ export const ledgerEntries = pgTable("ledger_entries", {
     transactionId: uuid("transaction_id")
         .notNull()
         .references(() => ledgerTransactions.id),
-    assetId: uuid("asset_id")
-        .notNull()
-        .references(() => assets.id),
     accountType: text("account_type").notNull(),
-    userId: uuid("user_id").references(() => users.id),
     direction: text("direction").notNull(),
-    amount: numeric("amount", {
-        precision: 78,
-        scale: 0,
-    }).notNull(),
     amountUsd: numeric("amount_usd", {
         precision: 78,
         scale: 0,
