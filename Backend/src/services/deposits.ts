@@ -118,20 +118,26 @@ export async function confirmDeposit(input: ConfirmDepositInput) {
             );
         }
 
-        // Lock the shared pool row. Create it if this is the first deposit.
-        let [poolState] = await tx
+        // Ensure the shared pool exists, then lock it.
+        await tx
+            .insert(poolStates)
+            .values({
+                singletonKey: 1,
+                totalAssetsUsd: "0",
+                totalShares: "0",
+            })
+            .onConflictDoNothing({
+                target: poolStates.singletonKey,
+            });
+
+        const [poolState] = await tx
             .select()
             .from(poolStates)
-            .limit(1)
+            .where(eq(poolStates.singletonKey, 1))
             .for("update");
 
         if (!poolState) {
-            const [createdPool] = await tx
-                .insert(poolStates)
-                .values({})
-                .returning();
-
-            poolState = createdPool;
+            throw new Error("Failed to load shared pool state");
         }
 
         // Calculate shares. The first deposit establishes the initial share price.
@@ -147,21 +153,22 @@ export async function confirmDeposit(input: ConfirmDepositInput) {
             throw new Error("Deposit would mint zero shares");
         }
 
-        // Lock or create the user's position.
-        let [position] = await tx
+        // Ensure the user's position exists, then lock it.
+        await tx
+            .insert(userPositions)
+            .values({ userId: input.userId })
+            .onConflictDoNothing({
+                target: userPositions.userId,
+            });
+
+        const [position] = await tx
             .select()
             .from(userPositions)
             .where(eq(userPositions.userId, input.userId))
-            .limit(1)
             .for("update");
 
         if (!position) {
-            const [createdPosition] = await tx
-                .insert(userPositions)
-                .values({ userId: input.userId })
-                .returning();
-
-            position = createdPosition;
+            throw new Error("Failed to load user position");
         }
 
         // Record the confirmed deposit. The unique constraint prevents duplicate

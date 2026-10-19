@@ -29,6 +29,27 @@
       "when": 1791845866477,
       "tag": "0003_ledger_usd_value",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791982305344,
+      "tag": "0004_tearful_menace",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792244700000,
+      "tag": "0005_fix_ledger_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792412854202,
+      "tag": "0006_busy_sabretooth",
+      "breakpoints": true
     }
   ]
 }

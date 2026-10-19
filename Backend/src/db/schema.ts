@@ -87,6 +87,7 @@ export const vaults = pgTable("vaults", {
 // Shares use 18-decimal fixed-point units.
 export const poolStates = pgTable("pool_states", {
     id: uuid("id").primaryKey().defaultRandom(),
+    singletonKey: integer("singleton_key").notNull().default(1).unique(),
     totalAssetsUsd: numeric("total_assets_usd", {
         precision: 78,
         scale: 0,
