@@ -1,6 +1,6 @@
 {
-  "id": "f2de2855-0aa7-481a-91a2-c74123839c26",
-  "prevId": "2e3ebff1-8987-43eb-95e4-3eeba71d41cd",
+  "id": "68c73c5c-963a-4995-94d3-09536d31546d",
+  "prevId": "d68d6cda-8324-486a-9aab-5a77dfba1040",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1416,12 +1416,6 @@
         },
         "amount_usd": {
           "name": "amount_usd",
-          "type": "numeric(78, 0)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "manager_shares_burned": {
-          "name": "manager_shares_burned",
           "type": "numeric(78, 0)",
           "primaryKey": false,
           "notNull": true

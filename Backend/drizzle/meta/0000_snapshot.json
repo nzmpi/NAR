@@ -1,5 +1,5 @@
 {
-  "id": "2e3ebff1-8987-43eb-95e4-3eeba71d41cd",
+  "id": "d68d6cda-8324-486a-9aab-5a77dfba1040",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1416,12 +1416,6 @@
         },
         "amount_usd": {
           "name": "amount_usd",
-          "type": "numeric(78, 0)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "manager_shares_burned": {
-          "name": "manager_shares_burned",
           "type": "numeric(78, 0)",
           "primaryKey": false,
           "notNull": true

@@ -160,7 +160,6 @@ CREATE TABLE "position_bonuses" (
 	"settlement_id" uuid NOT NULL,
 	"position_lot_id" uuid NOT NULL,
 	"amount_usd" numeric(78, 0) NOT NULL,
-	"manager_shares_burned" numeric(78, 0) NOT NULL,
 	"minted_shares" numeric(78, 0) NOT NULL,
 	"granted_by_admin_id" uuid NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL

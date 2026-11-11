@@ -364,7 +364,6 @@ export const positionBonuses = pgTable("position_bonuses", {
         .notNull()
         .references(() => positionLots.id),
     amountUsd: bigAmount("amount_usd").notNull(),
-    managerSharesBurned: bigAmount("manager_shares_burned").notNull(),
     mintedShares: bigAmount("minted_shares").notNull(),
     grantedByAdminId: uuid("granted_by_admin_id")
         .notNull()
