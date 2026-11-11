@@ -1,1 +1,0 @@
-ALTER TABLE "ledger_entries" ADD COLUMN "amount_usd" numeric(78, 0) NOT NULL;

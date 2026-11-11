@@ -1,5 +1,7 @@
 # Five-pool accounting schema plan
 
+> Status: implemented as baseline migration `0000_baseline` + `0001_seed_pools`. Deposit intents/transfers added beyond this draft.
+
 This replaces the prototype's singleton `pool_states` row and one `user_positions` row per user. It is a schema draft only; it does not change the running backend.
 
 ## Scope

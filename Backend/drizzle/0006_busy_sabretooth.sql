@@ -1,2 +1,0 @@
-ALTER TABLE "pool_states" ADD COLUMN "singleton_key" integer DEFAULT 1 NOT NULL;--> statement-breakpoint
-ALTER TABLE "pool_states" ADD CONSTRAINT "pool_states_singleton_key_unique" UNIQUE("singleton_key");
