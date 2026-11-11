@@ -15,6 +15,13 @@
       "when": 1794357710955,
       "tag": "0001_seed_pools",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794413670758,
+      "tag": "0002_deposit_sweep_fields",
+      "breakpoints": true
     }
   ]
 }

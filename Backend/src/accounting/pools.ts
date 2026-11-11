@@ -87,7 +87,8 @@ export function burn(
     shares: bigint,
 ): { state: PoolState; usd: bigint } {
     if (shares <= 0n || shares > s.shares) throw new Error("bad share amount");
-    const usd = valueOfShares(s, shares);
+    // Burning every share drains the pool exactly (no orphaned rounding dust).
+    const usd = shares === s.shares ? s.assets : valueOfShares(s, shares);
     return {
         state: { assets: s.assets - usd, shares: s.shares - shares },
         usd,

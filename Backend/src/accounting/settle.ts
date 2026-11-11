@@ -150,6 +150,10 @@ export function settle(input: SettleInput): SettleResult {
         keys.forEach((k, i) => (pools[k].assets += credits[i]));
         const credited = credits.reduce((a, b) => a + b, 0n);
         const managerExcess = pnl - credited;
+        if (managerExcess > 0n && before.manager.shares === 0n)
+            throw new Error(
+                "manager pool has no shares to receive excess profit",
+            );
         pools.manager.assets += managerExcess;
 
         // One-time bonuses: move value manager -> lot's pool, mint to that lot.

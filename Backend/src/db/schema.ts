@@ -216,6 +216,9 @@ export const depositIntents = pgTable(
         // Set when operator confirms the swept actual amount.
         confirmedAmount: bigAmount("confirmed_amount"),
         confirmedAmountUsd: bigAmount("confirmed_amount_usd"),
+        sweepTxHash: text("sweep_tx_hash"),
+        sweptByAdminId: uuid("swept_by_admin_id").references(() => admins.id),
+        sweptAt: timestamp("swept_at", { withTimezone: true }),
         // User must approve if confirmed amount != intended.
         userApprovedAmountAt: timestamp("user_approved_amount_at", {
             withTimezone: true,
