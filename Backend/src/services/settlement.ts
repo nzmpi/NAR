@@ -1,0 +1,332 @@
+import { and, desc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
+import {
+    auditLogs,
+    positionBonuses,
+    positionLots,
+    settlementAllocations,
+    settlements,
+} from "../db/schema.js";
+import {
+    settle,
+    type BonusRequest,
+    type MaturedLot,
+} from "../accounting/settle.js";
+import { applyMaturity } from "../accounting/actions.js";
+import {
+    LOCK_KEYS,
+    clonePools,
+    totalAssets,
+    type LockKey,
+    type PoolKey,
+    type Pools,
+} from "../accounting/pools.js";
+import { AppError } from "../errors.js";
+import { postLedger, type LedgerLine } from "./ledger.js";
+import { loadPoolsForUpdate, savePools, type PoolIds } from "./poolStore.js";
+import { fromSeconds, toSeconds } from "./time.js";
+import type { Database, Tx } from "./types.js";
+
+export interface SettleOptions {
+    adminId: string | null;
+    // Operator-entered current total USD value of ALL managed funds
+    // (all five pools incl. manager and accumulated fees), in micro-USD.
+    reportedTotalUsd: bigint;
+    bonuses?: { lotId: string; amountUsd: bigint }[];
+    note?: string;
+    kind?: "manual" | "pre_action";
+    now?: Date; // server time; injectable for tests only
+}
+
+export interface SettleOutcome {
+    settlementId: string;
+    pnlUsd: bigint;
+    pools: Pools; // final state (after maturity conversions), already saved
+    ids: PoolIds;
+    now: Date;
+    convertedLots: string[];
+}
+
+// Runs inside the caller's transaction. Locks all pool rows, settles at
+// server time, converts matured lots to liquid, saves pools, posts ledger.
+export async function settleInTx(
+    tx: Tx,
+    o: SettleOptions,
+): Promise<SettleOutcome> {
+    const now = o.now ?? new Date();
+    const { pools: before, ids } = await loadPoolsForUpdate(tx);
+    const keyById = new Map(
+        Object.entries(ids).map(([k, id]) => [id, k as PoolKey]),
+    );
+
+    // Interval start: last settlement, else earliest lot, else now.
+    const [last] = await tx
+        .select({ settledAt: settlements.settledAt })
+        .from(settlements)
+        .orderBy(desc(settlements.settledAt))
+        .limit(1);
+    let intervalStart = now;
+    if (last) {
+        intervalStart = last.settledAt;
+    } else {
+        const [first] = await tx
+            .select({ openedAt: positionLots.openedAt })
+            .from(positionLots)
+            .orderBy(positionLots.openedAt)
+            .limit(1);
+        if (first) intervalStart = first.openedAt;
+    }
+    if (now.getTime() < intervalStart.getTime())
+        throw new AppError("Settlement cannot be backdated", 409, "backdated");
+
+    // Lots that have matured but are still in lock pools.
+    const lockPoolIds = LOCK_KEYS.map((k) => ids[k]);
+    const matured = await tx
+        .select()
+        .from(positionLots)
+        .where(
+            and(
+                inArray(positionLots.poolId, lockPoolIds),
+                isNull(positionLots.closedAt),
+                lte(positionLots.maturesAt, now),
+            ),
+        )
+        .orderBy(positionLots.id);
+    if (matured.some((l) => BigInt(l.reservedShares) > 0n))
+        throw new AppError(
+            "A matured lot has a pending withdrawal reservation; resolve it first",
+            409,
+            "matured_reserved",
+        );
+    const maturedLots: MaturedLot[] = matured.map((l) => ({
+        poolKey: keyById.get(l.poolId) as LockKey,
+        shares: BigInt(l.shares),
+        maturesAt: toSeconds(l.maturesAt!),
+    }));
+
+    // Bonus requests -> pool keys from the lots.
+    const bonusReqs: BonusRequest[] = [];
+    const bonusLots = o.bonuses?.length
+        ? await tx
+              .select()
+              .from(positionLots)
+              .where(
+                  inArray(
+                      positionLots.id,
+                      o.bonuses.map((b) => b.lotId),
+                  ),
+              )
+        : [];
+    if (o.bonuses?.length && !o.adminId)
+        throw new AppError(
+            "Bonuses require an administrator",
+            403,
+            "forbidden",
+        );
+    for (const b of o.bonuses ?? []) {
+        const lot = bonusLots.find((l) => l.id === b.lotId);
+        if (!lot || lot.closedAt)
+            throw new AppError(
+                "Bonus lot not found or closed",
+                404,
+                "lot_not_found",
+            );
+        const key = keyById.get(lot.poolId)!;
+        if (key === "manager")
+            throw new AppError(
+                "Bonus lot cannot be in the manager pool",
+                400,
+                "bad_bonus",
+            );
+        bonusReqs.push({
+            lotId: b.lotId,
+            poolKey: key,
+            amountUsd: b.amountUsd,
+        });
+    }
+
+    let result;
+    try {
+        result = settle({
+            pools: before,
+            reportedTotalUsd: o.reportedTotalUsd,
+            intervalStart: toSeconds(intervalStart),
+            settledAt: toSeconds(now),
+            maturedLots,
+            bonuses: bonusReqs,
+        });
+    } catch (e) {
+        throw new AppError((e as Error).message, 400, "settlement_rejected");
+    }
+
+    const [s] = await tx
+        .insert(settlements)
+        .values({
+            kind: o.kind ?? "manual",
+            previousTotalAssetsUsd: totalAssets(before).toString(),
+            reportedTotalAssetsUsd: o.reportedTotalUsd.toString(),
+            pnlUsd: result.pnlUsd.toString(),
+            intervalStart: fromSeconds(toSeconds(intervalStart)),
+            settledAt: now,
+            adminId: o.adminId,
+            note: o.note ?? null,
+        })
+        .returning({ id: settlements.id });
+
+    if (result.allocations.length) {
+        await tx.insert(settlementAllocations).values(
+            result.allocations.map((a) => ({
+                settlementId: s.id,
+                poolId: ids[a.poolKey],
+                kind: a.kind,
+                amountUsd: a.amountUsd.toString(),
+                navBeforeUsd: before[a.poolKey].assets.toString(),
+                navAfterUsd: result.pools[a.poolKey].assets.toString(),
+                sharesAfter: result.pools[a.poolKey].shares.toString(),
+            })),
+        );
+    }
+
+    // Settlement ledger: pool_equity moves by each allocation; managed_funds
+    // carries the net P&L.
+    const lines: LedgerLine[] = result.allocations.map((a) => ({
+        account: "pool_equity",
+        poolId: ids[a.poolKey],
+        direction: a.amountUsd >= 0n ? "credit" : "debit",
+        amountUsd: a.amountUsd >= 0n ? a.amountUsd : -a.amountUsd,
+    }));
+    if (result.pnlUsd !== 0n)
+        lines.push({
+            account: "managed_funds",
+            direction: result.pnlUsd > 0n ? "debit" : "credit",
+            amountUsd: result.pnlUsd > 0n ? result.pnlUsd : -result.pnlUsd,
+        });
+    await postLedger(tx, {
+        type: "settlement",
+        referenceType: "settlement",
+        referenceId: s.id,
+        adminId: o.adminId,
+        lines,
+    });
+
+    // Bonus shares go to the chosen lot.
+    for (const bm of result.bonusMints) {
+        const lot = bonusLots.find((l) => l.id === bm.lotId)!;
+        await tx
+            .update(positionLots)
+            .set({
+                shares: sql`${positionLots.shares} + ${bm.sharesMinted.toString()}::numeric`,
+                updatedAt: now,
+            })
+            .where(eq(positionLots.id, lot.id));
+        await tx.insert(positionBonuses).values({
+            settlementId: s.id,
+            positionLotId: lot.id,
+            amountUsd: bm.amountUsd.toString(),
+            mintedShares: bm.sharesMinted.toString(),
+            grantedByAdminId: o.adminId!,
+        });
+    }
+
+    // Convert matured lots to liquid at current value (reload bonus-updated shares).
+    let state = clonePools(result.pools);
+    const converted: string[] = [];
+    if (matured.length) {
+        const fresh = await tx
+            .select()
+            .from(positionLots)
+            .where(
+                inArray(
+                    positionLots.id,
+                    matured.map((l) => l.id),
+                ),
+            )
+            .orderBy(positionLots.id);
+        for (const lot of fresh) {
+            const key = keyById.get(lot.poolId)!;
+            const r = applyMaturity(state, key, BigInt(lot.shares));
+            state = r.pools;
+            await tx
+                .update(positionLots)
+                .set({ shares: "0", closedAt: now, updatedAt: now })
+                .where(eq(positionLots.id, lot.id));
+            await tx.insert(positionLots).values({
+                userId: lot.userId,
+                poolId: ids.liquid,
+                shares: r.liquidShares.toString(),
+                principalUsd: lot.principalUsd,
+                openedAt: now,
+                maturesAt: null,
+                sourceType: "maturity",
+                sourceId: lot.id,
+                parentLotId: lot.id,
+            });
+            await postLedger(tx, {
+                type: "maturity",
+                referenceType: "position_lot",
+                referenceId: lot.id,
+                adminId: o.adminId,
+                lines: [
+                    {
+                        account: "pool_equity",
+                        poolId: ids[key],
+                        direction: "debit",
+                        amountUsd: r.usd,
+                        userId: lot.userId,
+                    },
+                    {
+                        account: "pool_equity",
+                        poolId: ids.liquid,
+                        direction: "credit",
+                        amountUsd: r.usd,
+                        userId: lot.userId,
+                    },
+                ],
+            });
+            converted.push(lot.id);
+        }
+    }
+
+    await savePools(tx, ids, state);
+    if (totalAssets(state) !== o.reportedTotalUsd)
+        throw new Error(
+            "invariant: pool NAVs != reported total after conversion",
+        );
+
+    if (o.adminId)
+        await tx.insert(auditLogs).values({
+            adminId: o.adminId,
+            action: "settlement.recorded",
+            entityType: "settlement",
+            entityId: s.id,
+            details: {
+                reportedTotalUsd: o.reportedTotalUsd.toString(),
+                pnlUsd: result.pnlUsd.toString(),
+                bonuses: result.bonusMints.map((b) => ({
+                    ...b,
+                    amountUsd: b.amountUsd.toString(),
+                    sharesMinted: b.sharesMinted.toString(),
+                })),
+                convertedLots: converted,
+                note: o.note ?? null,
+            },
+        });
+
+    return {
+        settlementId: s.id,
+        pnlUsd: result.pnlUsd,
+        pools: state,
+        ids,
+        now,
+        convertedLots: converted,
+    };
+}
+
+// Operator records current total NAV (optionally with one-time bonuses).
+export function settleManual(
+    database: Database,
+    o: Omit<SettleOptions, "kind">,
+) {
+    return database.transaction((tx) =>
+        settleInTx(tx, { ...o, kind: "manual" }),
+    );
+}
