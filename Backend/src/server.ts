@@ -1,43 +1,13 @@
-import "dotenv/config";
-import Fastify from "fastify";
-import { sql } from "drizzle-orm";
-import { db, pool } from "./db/index.js";
+import { buildApp } from "./app.js";
+import { config } from "./config.js";
+import { ensureOwnerAdmin } from "./bootstrap.js";
+import { pool } from "./db/index.js";
 
-const app = Fastify({
-    logger: true,
-});
-
-app.get("/health", async () => {
-    return {
-        status: "ok",
-    };
-});
-
-app.get("/health/db", async (_request, reply) => {
-    try {
-        await db.execute(sql`SELECT 1`);
-
-        return {
-            status: "ok",
-            database: "connected",
-        };
-    } catch (error) {
-        app.log.error(error);
-
-        return reply.code(503).send({
-            status: "error",
-            database: "unavailable",
-        });
-    }
-});
-
-const port = Number(process.env.PORT ?? 3000);
+const app = await buildApp();
 
 try {
-    await app.listen({
-        port,
-        host: "127.0.0.1",
-    });
+    await ensureOwnerAdmin();
+    await app.listen({ port: config.PORT, host: config.HOST });
 } catch (error) {
     app.log.error(error);
     await pool.end();
