@@ -78,9 +78,11 @@ export async function settleInTx(
     if (now.getTime() < intervalStart.getTime())
         throw new AppError("Settlement cannot be backdated", 409, "backdated");
 
-    // Lots that have matured but are still in lock pools.
+    // Lots that have matured but are still in lock pools. Lots with a pending
+    // withdrawal reservation stay put until it is resolved; they are treated
+    // as liquid (matured) from the interval start once released.
     const lockPoolIds = LOCK_KEYS.map((k) => ids[k]);
-    const matured = await tx
+    const maturedAll = await tx
         .select()
         .from(positionLots)
         .where(
@@ -91,17 +93,16 @@ export async function settleInTx(
             ),
         )
         .orderBy(positionLots.id);
-    if (matured.some((l) => BigInt(l.reservedShares) > 0n))
-        throw new AppError(
-            "A matured lot has a pending withdrawal reservation; resolve it first",
-            409,
-            "matured_reserved",
-        );
-    const maturedLots: MaturedLot[] = matured.map((l) => ({
-        poolKey: keyById.get(l.poolId) as LockKey,
-        shares: BigInt(l.shares),
-        maturesAt: toSeconds(l.maturesAt!),
-    }));
+    const matured = maturedAll.filter((l) => BigInt(l.reservedShares) === 0n);
+    const t0 = toSeconds(intervalStart);
+    const maturedLots: MaturedLot[] = matured.map((l) => {
+        const m = toSeconds(l.maturesAt!);
+        return {
+            poolKey: keyById.get(l.poolId) as LockKey,
+            shares: BigInt(l.shares),
+            maturesAt: m < t0 ? t0 : m,
+        };
+    });
 
     // Bonus requests -> pool keys from the lots.
     const bonusReqs: BonusRequest[] = [];
