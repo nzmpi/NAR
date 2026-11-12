@@ -27,6 +27,7 @@ const updatedAt = () =>
 /* ------------------------------------------------------------------ */
 /* Identity                                                            */
 /* ------------------------------------------------------------------ */
+
 export const users = pgTable("users", {
     id: uuid("id").primaryKey().defaultRandom(),
     telegramId: text("telegram_id").notNull().unique(),
@@ -47,6 +48,7 @@ export const admins = pgTable("admins", {
 /* ------------------------------------------------------------------ */
 /* Chains, assets, vaults                                              */
 /* ------------------------------------------------------------------ */
+
 export const chains = pgTable("chains", {
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull().unique(),
@@ -377,6 +379,7 @@ export const positionBonuses = pgTable("position_bonuses", {
 /* ------------------------------------------------------------------ */
 /* Withdrawals                                                         */
 /* ------------------------------------------------------------------ */
+
 export const payoutAddresses = pgTable(
     "payout_addresses",
     {
@@ -455,6 +458,7 @@ export const withdrawalAllocations = pgTable(
 /* ------------------------------------------------------------------ */
 /* Ledger, idempotency, audit                                          */
 /* ------------------------------------------------------------------ */
+
 export const ledgerTransactions = pgTable("ledger_transactions", {
     id: uuid("id").primaryKey().defaultRandom(),
     type: text("type").notNull(),
@@ -510,3 +514,54 @@ export const auditLogs = pgTable("audit_logs", {
     details: jsonb("details"),
     createdAt: createdAt(),
 });
+
+/* ------------------------------------------------------------------ */
+/* Relock queue                                                        */
+/* ------------------------------------------------------------------ */
+
+// Queued until the next settlement, then applied at that settlement's
+// prices. status: pending | applied | failed | cancelled
+export const relockRequests = pgTable(
+    "relock_requests",
+    {
+        id: uuid("id").primaryKey().defaultRandom(),
+        userId: uuid("user_id")
+            .notNull()
+            .references(() => users.id),
+        status: text("status").notNull().default("pending"),
+        settlementId: uuid("settlement_id").references(() => settlements.id),
+        appliedAt: timestamp("applied_at", { withTimezone: true }),
+        createdAt: createdAt(),
+    },
+    (t) => [index("relock_requests_user_idx").on(t.userId, t.status)],
+);
+
+// One source lot -> one target tier. Splitting = several items.
+// status: pending | applied | failed | cancelled
+export const relockItems = pgTable(
+    "relock_items",
+    {
+        id: uuid("id").primaryKey().defaultRandom(),
+        requestId: uuid("request_id")
+            .notNull()
+            .references(() => relockRequests.id),
+        sourceLotId: uuid("source_lot_id")
+            .notNull()
+            .references(() => positionLots.id),
+        targetPoolId: uuid("target_pool_id")
+            .notNull()
+            .references(() => pools.id),
+        amountUsd: bigAmount("amount_usd"), // null when isMax
+        isMax: boolean("is_max").notNull().default(false),
+        reservedShares: bigAmount("reserved_shares").notNull(),
+        status: text("status").notNull().default("pending"),
+        failureReason: text("failure_reason"),
+        appliedShares: bigAmount("applied_shares"),
+        appliedUsd: bigAmount("applied_usd"),
+        resultLotId: uuid("result_lot_id").references(() => positionLots.id),
+    },
+    (t) => [
+        index("relock_items_request_idx").on(t.requestId),
+        index("relock_items_status_idx").on(t.status),
+    ],
+);

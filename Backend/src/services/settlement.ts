@@ -25,6 +25,7 @@ import { postLedger, type LedgerLine } from "./ledger.js";
 import { loadPoolsForUpdate, savePools, type PoolIds } from "./poolStore.js";
 import { fromSeconds, toSeconds } from "./time.js";
 import type { Database, Tx } from "./types.js";
+import { applyPendingRelocks } from "./relocks.js";
 
 export interface SettleOptions {
     adminId: string | null;
@@ -286,6 +287,16 @@ export async function settleInTx(
             converted.push(lot.id);
         }
     }
+
+    // Queued relocks are applied at this settlement's prices.
+    const relocks = await applyPendingRelocks(tx, {
+        state,
+        ids,
+        now,
+        settlementId: s.id,
+        adminId: o.adminId,
+    });
+    state = relocks.state;
 
     await savePools(tx, ids, state);
     if (totalAssets(state) !== o.reportedTotalUsd)
