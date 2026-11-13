@@ -5,50 +5,36 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1791737474305,
-      "tag": "0000_initial_core",
+      "when": 1794357710459,
+      "tag": "0000_baseline",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1791757563944,
-      "tag": "0001_financial_tables",
+      "when": 1794357710955,
+      "tag": "0001_seed_pools",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "7",
-      "when": 1791825842436,
-      "tag": "0002_financial_tables",
+      "when": 1794413670758,
+      "tag": "0002_deposit_sweep_fields",
       "breakpoints": true
     },
     {
       "idx": 3,
       "version": "7",
-      "when": 1791845866477,
-      "tag": "0003_ledger_usd_value",
+      "when": 1794500935241,
+      "tag": "0003_bizarre_thanos",
       "breakpoints": true
     },
     {
       "idx": 4,
       "version": "7",
-      "when": 1791982305344,
-      "tag": "0004_tearful_menace",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1792244700000,
-      "tag": "0005_fix_ledger_schema",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1792412854202,
-      "tag": "0006_busy_sabretooth",
+      "when": 1794567078749,
+      "tag": "0004_normal_nocturne",
       "breakpoints": true
     }
   ]

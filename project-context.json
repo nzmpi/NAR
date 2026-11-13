@@ -2,7 +2,7 @@
   "project": {
     "name": "NAR Telegram trading pool",
     "purpose": "A Telegram Mini App and bot for a private group to deposit stablecoins into deterministic per-user vaults, receive pooled manual trading returns, and request manual withdrawals.",
-    "status": "planning",
+    "status": "initial backend prototype implemented; product workflow remains in design and alignment work.",
     "maintenance": "Update this file only when the user explicitly asks for an update."
   },
   "scope": {
@@ -80,50 +80,55 @@
       {
         "tier": 0,
         "label": "Liquid",
-        "targetApr": 0.06,
-        "rewardWeight": 1.0
+        "projectedApy": 0.06,
+        "lockDuration": "none"
       },
       {
         "tier": 1,
         "label": "1 month",
-        "targetApr": 0.08,
-        "rewardWeight": 1.3333333333
+        "projectedApy": 0.08,
+        "lockDuration": "1 month"
       },
       {
         "tier": 2,
         "label": "2 months",
-        "targetApr": 0.09,
-        "rewardWeight": 1.5
+        "projectedApy": 0.09,
+        "lockDuration": "2 months"
       },
       {
         "tier": 3,
         "label": "3 months",
-        "targetApr": 0.1,
-        "rewardWeight": 1.6666666667
+        "projectedApy": 0.1,
+        "lockDuration": "3 months"
       }
     ],
-    "meaning": "Target APRs are relative weights for distributing actual profit, never guaranteed returns.",
-    "maturity": "At lock expiry, a position automatically becomes tier 0. It keeps its accrued yield and earns future dividends at the liquid weight.",
-    "extension": "An active lock can only extend to a longer tier. The old position's principal plus accrued yield becomes principal in a new position with a new lock start, higher-tier weight, and no fee.",
-    "compounding": "A user can create a new lock using any amount up to their available principal plus accrued yield. The Max action uses all available value."
+    "meaning": "Rates are projected, compounded APYs. They are not guaranteed: actual historical return may be lower or higher. The default positive-P&L allocation targets each tier's projected APY; the operator may grant a one-time higher bonus funded from manager excess profit.",
+    "lots": "Every confirmed deposit or relock allocation creates an independent position lot. A user can hold multiple lots in different tiers and split a deposit or relock among them. Adding money to an active lock starts a new full-duration lot.",
+    "maturity": "At lock expiry, the lot moves to the liquid pool at its current value. Locks never renew automatically.",
+    "relocking": "A user can relock any available amount, including gains, into one or more new lots. Max selects all available value. An active lock can only be extended to a longer tier; it becomes a new lot with a new start and maturity time and no fee."
   },
-  "dividends_and_losses": {
-    "ledger_location": "Backend only; dividends are not calculated by the contracts.",
-    "distribution": "Maintain a global cumulative dividend-per-reward-share accumulator. A position stores a reward-share balance and its accumulator checkpoint, so user yield is calculated lazily without recomputing all users on every distribution.",
-    "pnl_entry": "The operator periodically records immutable positive or negative USD P&L entries. Corrections must be new offsetting entries, not edits to history.",
-    "loss_policy": "Negative P&L creates a global loss carryforward. Future positive P&L first clears that carryforward; only the excess becomes a distributable dividend. User principal does not decrease from losses.",
-    "example": "Record -50 USD, then +100 USD: clear 50 USD of loss carryforward and distribute 50 USD by reward shares.",
-    "safety_metric": "Track actual treasury value against user principal and yield liabilities internally.",
-    "entry_fields": "Each P&L entry requires a signed USD amount and short note. Recorded time is system-set; an optional effective date is informational and does not retroactively alter allocations."
+  "multi_pool_accounting": {
+    "ledger_location": "Backend only; contracts do not calculate balances or yield.",
+    "pools": "Maintain five USD NAV/share pools: liquid, 1-month, 2-month, 3-month, and manager. A user holds shares through their position lots; the manager pool is visible only to the admin.",
+    "operator_input": "For each settlement, the operator enters the current total USD value of all managed funds, including the manager pool and accumulated early-withdrawal fees. Server time is the settlement time; it cannot be backdated.",
+    "positive_pnl": "First credit participant pools toward their compounded projected APY for the elapsed settlement interval, with time-weighting when a lock matures during that interval. The manager pool receives all remaining positive value. The operator may move part of that manager excess to selected lots as a one-time bonus; it is not a persistent rate change.",
+    "negative_pnl": "When reported total NAV falls, reduce every pool, including the manager pool, by the same percentage of its current NAV. There is no loss carryforward or high-water mark.",
+    "settlement_order": "Settle the pool before every balance-changing action: deposit confirmation, withdrawal reservation or payment, relock, and maturity conversion.",
+    "compounding": "Projected rates compound. For an elapsed period, calculate the tier cap as (1 + projectedAPY)^(days/365) - 1.",
+    "invariants": [
+      "After settlement, the sum of the five pool NAVs equals the reported total NAV.",
+      "Pool share prices change with settlement; deposits, withdrawals, relocks, maturity transfers, and position bonuses mint or burn shares at the applicable current price.",
+      "All USD values and shares use fixed-point integers; never floating-point arithmetic."
+    ]
   },
   "withdrawals": {
     "processing": "Users submit requests in the Mini App; the operator manually swaps, bridges, and sends the requested stablecoin on the requested supported chain.",
-    "early_locked_withdrawal": "For the withdrawn part of an active lock, cancel its unpaid accrued yield and charge 10% of that withdrawn principal. Pay 90% of withdrawn principal. The fee is credited to a separate admin-fee balance and is not distributed to the pool.",
-    "partial_withdrawal": "Allowed. Split the position logically: the withdrawn portion is closed; the remainder stays on its original lock and retains proportional accrued yield.",
-    "mature_or_liquid_withdrawal": "No early-withdrawal fee; principal and eligible accrued yield can be withdrawn.",
+    "early_locked_withdrawal": "For the selected amount taken from an active lock, charge 10% of its current value. For example, withdrawing 400 USD pays 360 USD and credits 40 USD to the manager pool. The quote must clearly show this fee before approval.",
+    "partial_withdrawal": "Allowed. Burn the shares for the selected current value; the remaining lot stays active with its remaining shares and original maturity.",
+    "mature_or_liquid_withdrawal": "No early-withdrawal fee; current pool value can be withdrawn.",
     "payout_address": "Users enter any valid EVM payout address for each request after selecting a supported chain, stablecoin, and amount. Previously used payout addresses are saved per user and can be selected for convenience.",
     "reservation": "On explicit user approval, a withdrawal request reserves the requested amount so it cannot be relocked or requested twice. The user can cancel only while the request is pending.",
-    "request_quote": "For any active-lock amount, show the affected position, forfeited yield, 10% early-withdrawal fee, and final payout before user approval. The result is fixed when approved.",
+    "request_quote": "For any active-lock amount, show the affected position, 10% early-withdrawal fee, and final payout before user approval. The result is fixed when approved.",
     "liquidity_order": "Use liquid balance first; the user chooses any locked positions and amounts needed for the remainder.",
     "admin_outcome": "Admin may reject a request with a user-visible reason. Mark paid only after the outgoing transaction hash is recorded.",
     "network_fees": "Admin absorbs withdrawal network fees for now.",
@@ -137,9 +142,8 @@
       "accrued yield",
       "pending deposits",
       "lock status and maturity dates",
-      "weighted target APR",
-      "earned-yield APR",
-      "strategy APR"
+      "projected APY",
+      "historical APY"
     ],
     "history_visible_to_user": [
       "deposits",
@@ -152,8 +156,8 @@
       "3 months",
       "1 year"
     ],
-    "performance_rules": "Calculate period yield from retained backend dividend and balance history while adjusting for deposits, withdrawals, relocks, and maturity changes. Earned-yield APR cannot be negative because dividends do not go below zero. Strategy APR can be negative and is annualized period net pool P&L divided by average managed capital.",
-    "landing": "Show selected-period pool strategy APR, the 6-10% target range, and illustrative target-rate projections that state actual returns may be lower or higher based on trading performance and market conditions.",
+    "performance_rules": "Show each user only their projected APY and historical APY, calculated from retained balance history while adjusting for deposits, withdrawals, relocks, and maturity changes. Historical APY may be negative. Gross pool performance and manager excess are admin-only.",
+    "landing": "Show the 6-10% projected APY range and illustrative projections such as a 1,000 USD balance over one year. State that actual returns may be lower or higher based on trading performance and market conditions.",
     "relocking": "Locks never renew automatically; users choose every new lock manually."
   },
   "authentication": {
@@ -180,6 +184,27 @@
       "withdrawal paid"
     ]
   },
+  "backend_initial_implementation": {
+    "location": "Backend/",
+    "stack": "Fastify, TypeScript, Drizzle ORM, PostgreSQL, Zod, and pg.",
+    "implemented": [
+      "Health and database-health endpoints.",
+      "A development-only admin deposit-confirmation endpoint at POST /admin/deposits/confirm.",
+      "Core users, admins, chains, assets, vaults, pooled state, positions, deposits, withdrawals, ledger, idempotency, and audit-log tables.",
+      "Transactional deposit confirmation that mints pooled shares, writes balanced USD ledger entries, updates a user position and pooled state, and writes an audit record.",
+      "Input validation for IDs, whole-unit token amounts, transaction hashes, transfer indexes, active user/vault/asset relationships, and USDT/USDC/DAI symbols."
+    ],
+    "verification": "npm run build completed successfully on 2026-10-19.",
+    "current_model": "One USD-denominated pooled NAV/share prototype. It must be replaced with five pool states and per-lot position shares: liquid, 1-month, 2-month, 3-month, and manager.",
+    "required_alignment": [
+      "Replace development-only environment-variable admin identity with Telegram Mini App and Telegram Login authentication.",
+      "Add deposit intents, 24-hour expiry, pending/manual matching, amount-change approval, vault deployment, sweep, and confirmation states.",
+      "Verify onchain ERC-20 transfers before crediting deposits; the current endpoint trusts submitted amount and transaction metadata.",
+      "Replace the singleton position/pool model with lock lots, five pool states, manual total-NAV settlement, time-weighted tier caps, manager excess, one-time position bonuses, maturity, relock, withdrawal reservation, early fee, and payout workflows.",
+      "Repair the migration sequence before applying it to a fresh database: 0005 references ledger columns already removed by 0004, and 0006_single_pool_state is not listed in the Drizzle journal.",
+      "Delete or relocate the untracked PostgreSQL schema-dump artifact at Backend/src/services/Table public.ledger_entries before committing."
+    ]
+  },
   "technology": {
     "frontend": "TypeScript and Next.js Telegram Mini App.",
     "backend": "TypeScript and Node.js API service.",
@@ -188,9 +213,8 @@
     "test_environment": "Use the same bot and codebase with a server-enforced admin-only test environment. It has separate test-chain configuration and database; only the owner Telegram account can use it."
   },
   "open_decisions": [
-    "Define the exact database schema.",
     "Choose the Telegram bot library and hosting platform.",
-    "Define the detailed database schema, API contracts, and operator review screens.",
+    "Implement the drafted multi-pool database migration and API contracts.",
     "Design the explicit contract-hardening changes when the user requests them.",
     "Add donation or vault-sharing features only in a later scope."
   ]
