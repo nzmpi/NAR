@@ -34,6 +34,7 @@ import {
     adminPools,
 } from "../../services/queries.js";
 import { AppError } from "../../errors.js";
+import { adminPerformance } from "../../services/history.js";
 
 const statusQuery = z.object({ status: z.string().max(40).optional() });
 
@@ -44,15 +45,13 @@ async function audit(
     entityId: string,
     details: unknown,
 ) {
-    await db
-        .insert(auditLogs)
-        .values({
-            adminId,
-            action,
-            entityType,
-            entityId,
-            details: details as object,
-        });
+    await db.insert(auditLogs).values({
+        adminId,
+        action,
+        entityType,
+        entityId,
+        details: details as object,
+    });
 }
 
 export async function adminRoutes(app: FastifyInstance) {
@@ -61,6 +60,14 @@ export async function adminRoutes(app: FastifyInstance) {
     /* overview */
     app.get("/admin/pools", auth, async () => adminPools(db));
     app.get("/admin/users", auth, async () => adminListUsers(db));
+    app.get("/admin/performance", auth, async (req) => {
+        const q = z
+            .object({
+                range: z.enum(["1w", "1m", "3m", "1y", "all"]).default("1m"),
+            })
+            .parse(req.query);
+        return adminPerformance(db, q.range);
+    });
 
     /* settlement: operator enters current total USD value of ALL managed funds */
     app.post("/admin/settlements", auth, async (req) => {

@@ -31,6 +31,7 @@ import {
     listUserVaults,
     listUserWithdrawals,
 } from "../../services/queries.js";
+import { computePerformance } from "../../services/history.js";
 
 const intentBody = z.object({
     vaultId: uuid,
@@ -88,6 +89,14 @@ export async function userRoutes(app: FastifyInstance) {
     app.get("/me/portfolio", auth, async (req) =>
         getPortfolio(db, req.user!.id),
     );
+    app.get("/me/performance", auth, async (req) => {
+        const q = z
+            .object({
+                range: z.enum(["1w", "1m", "3m", "1y", "all"]).default("1m"),
+            })
+            .parse(req.query);
+        return computePerformance(db, req.user!.id, q.range);
+    });
 
     /* deposits */
     app.get("/me/deposits", auth, async (req) =>

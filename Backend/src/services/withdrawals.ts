@@ -27,6 +27,7 @@ import { postLedger, type LedgerLine } from "./ledger.js";
 import { loadPoolsForUpdate, savePools, type PoolIds } from "./poolStore.js";
 import { settleInTx } from "./settlement.js";
 import type { Database, Tx } from "./types.js";
+import { recordFlow } from "./history.js";
 
 export const MIN_WITHDRAWAL_USD = 5n * USD_MICRO;
 const STABLES = ["USDT", "USDC", "DAI"];
@@ -514,6 +515,13 @@ export function markWithdrawalPaid(
                 direction: "debit",
                 amountUsd: burned.usd,
             });
+            if (key !== "manager")
+                await recordFlow(tx, {
+                    userId: lot.userId,
+                    settlementId: settled.settlementId,
+                    kind: "withdrawal",
+                    amountUsd: -burned.usd,
+                });
 
             const newShares = BigInt(lot.shares) - f.burnShares;
             await tx

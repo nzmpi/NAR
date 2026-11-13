@@ -21,6 +21,7 @@ import { loadPoolsForUpdate, savePools } from "./poolStore.js";
 import { settleInTx } from "./settlement.js";
 import { addMonths } from "./time.js";
 import type { Database, Tx } from "./types.js";
+import { recordFlow } from "./history.js";
 
 export const MIN_DEPOSIT_USD = 50n * USD_MICRO;
 export const INTENT_TTL_MS = 24 * 60 * 60 * 1000;
@@ -618,6 +619,13 @@ export function activateDeposit(
                 direction: "credit",
                 amountUsd: part.usd,
             });
+            if (part.poolKey !== "manager")
+                await recordFlow(tx, {
+                    userId: intent.userId,
+                    settlementId: settled.settlementId,
+                    kind: "deposit",
+                    amountUsd: part.usd,
+                });
         }
         lines.push({
             account: "managed_funds",

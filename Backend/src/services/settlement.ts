@@ -26,6 +26,7 @@ import { loadPoolsForUpdate, savePools, type PoolIds } from "./poolStore.js";
 import { fromSeconds, toSeconds } from "./time.js";
 import type { Database, Tx } from "./types.js";
 import { applyPendingRelocks } from "./relocks.js";
+import { snapshotBalances } from "./history.js";
 
 export interface SettleOptions {
     adminId: string | null;
@@ -297,6 +298,7 @@ export async function settleInTx(
         adminId: o.adminId,
     });
     state = relocks.state;
+    await snapshotBalances(tx, { state, ids, settlementId: s.id, now });
 
     await savePools(tx, ids, state);
     if (totalAssets(state) !== o.reportedTotalUsd)

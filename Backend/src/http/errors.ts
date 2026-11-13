@@ -18,13 +18,11 @@ export function registerErrorHandler(app: FastifyInstance) {
                 .code(err.status)
                 .send({ error: err.message, code: err.code });
         if (err instanceof ZodError)
-            return reply
-                .code(400)
-                .send({
-                    error: "Invalid request",
-                    code: "validation",
-                    details: err.issues,
-                });
+            return reply.code(400).send({
+                error: "Invalid request",
+                code: "validation",
+                details: err.issues,
+            });
 
         const pg = pgErrorCode(err);
         if (pg === "23505")
@@ -32,12 +30,10 @@ export function registerErrorHandler(app: FastifyInstance) {
                 .code(409)
                 .send({ error: "Already recorded", code: "duplicate" });
         if (pg === "23514")
-            return reply
-                .code(409)
-                .send({
-                    error: "Conflicts with current balances or state",
-                    code: "conflict",
-                });
+            return reply.code(409).send({
+                error: "Conflicts with current balances or state",
+                code: "conflict",
+            });
         if (pg === "40001" || pg === "40P01")
             return reply
                 .code(503)

@@ -25,6 +25,7 @@ import {
     type Pools,
 } from "../accounting/pools.js";
 import type { Database } from "./types.js";
+import { computePerformance } from "./history.js";
 
 const LIMIT = 200;
 
@@ -145,14 +146,15 @@ export async function getPortfolio(database: Database, userId: string) {
             ),
         );
 
+    const perf = await computePerformance(database, userId, "all");
+
     return {
         totalBalanceUsd: total,
         liquidPrincipalUsd: liquidPrincipal,
         lockedPrincipalUsd: lockedPrincipal,
         accruedYieldUsd: total - liquidPrincipal - lockedPrincipal,
         projectedApyBps: total > 0n ? Number(weighted / total) : null,
-        // Needs retained balance history; not implemented yet.
-        historicalApy: null,
+        historicalApy: perf.apy,
         lots: out,
         pendingDeposits: pending,
     };
