@@ -10,6 +10,7 @@ import {
     poolKey,
     uuid,
     evmAddress,
+    txHash,
 } from "../schemas.js";
 import {
     approveAmount,
@@ -32,6 +33,10 @@ import {
     listUserWithdrawals,
 } from "../../services/queries.js";
 import { computePerformance } from "../../services/history.js";
+import {
+    attachTxToIntent,
+    checkIntent,
+} from "../../services/transferScanner.js";
 
 const intentBody = z.object({
     vaultId: uuid,
@@ -135,6 +140,21 @@ export async function userRoutes(app: FastifyInstance) {
             return reply.code(204).send();
         },
     );
+
+    app.post("/me/deposits/intents/:id/check", auth, async (req) => {
+        const { id } = idParam.parse(req.params);
+        return checkIntent(db, id, req.user!.id);
+    });
+
+    app.post("/me/deposits/intents/:id/tx-hash", auth, async (req) => {
+        const { id } = idParam.parse(req.params);
+        const b = z.object({ txHash }).parse(req.body);
+        return attachTxToIntent(db, {
+            intentId: id,
+            userId: req.user!.id,
+            txHash: b.txHash,
+        });
+    });
 
     /* withdrawals */
     app.get("/me/withdrawals", auth, async (req) =>

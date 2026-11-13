@@ -36,6 +36,13 @@
       "when": 1794567078749,
       "tag": "0004_normal_nocturne",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794573664686,
+      "tag": "0005_majestic_ghost_rider",
+      "breakpoints": true
     }
   ]
 }

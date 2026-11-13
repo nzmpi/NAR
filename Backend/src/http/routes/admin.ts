@@ -14,12 +14,15 @@ import { requireAdmin } from "../auth.js";
 import { big, evmAddress, idParam, txHash, uuid } from "../schemas.js";
 import {
     activateDeposit,
-    autoMatchTransfer,
     matchTransfer,
     recordSweep,
-    recordTransfer,
     rejectIntent,
 } from "../../services/depositIntents.js";
+import {
+    ingestTransactionByHash,
+    reverifyIntentTransfers,
+    verifySweepTx,
+} from "../../services/transferScanner.js";
 import { settleManual } from "../../services/settlement.js";
 import {
     markWithdrawalPaid,
@@ -100,29 +103,25 @@ export async function adminRoutes(app: FastifyInstance) {
         return adminListTransfers(db, q.unmatched === "true");
     });
 
-    // No onchain verification yet (RPC pending): the operator supplies the transfer.
     app.post("/admin/transfers", auth, async (req, reply) => {
         const b = z
             .object({
-                vaultId: uuid,
-                assetId: uuid,
+                chainId: uuid,
                 txHash,
-                logIndex: z.number().int().nonnegative(),
-                amount: big,
-                fromAddress: evmAddress.optional(),
-                blockNumber: big.optional(),
+                logIndex: z.number().int().nonnegative().optional(),
             })
             .parse(req.body);
-        const transfer = await recordTransfer(db, b);
-        const m = await autoMatchTransfer(db, transfer.id);
-        await audit(
-            req.admin!.id,
-            "transfer.recorded",
-            "deposit_transfer",
-            transfer.id,
-            { matched: m.matched },
+        const rows = await ingestTransactionByHash(
+            db,
+            b.chainId,
+            b.txHash,
+            b.logIndex,
         );
-        return reply.code(201).send({ transfer, matched: m.matched });
+        await audit(req.admin!.id, "transfer.ingested", "chain", b.chainId, {
+            txHash: b.txHash,
+            count: rows.length,
+        });
+        return reply.code(201).send({ transfers: rows });
     });
 
     app.post("/admin/transfers/:id/match", auth, async (req, reply) => {
@@ -144,6 +143,8 @@ export async function adminRoutes(app: FastifyInstance) {
         const b = z
             .object({ sweepTxHash: txHash, confirmedAmount: big.optional() })
             .parse(req.body);
+        await reverifyIntentTransfers(db, id);
+        await verifySweepTx(db, id, b.sweepTxHash);
         const r = await recordSweep(db, {
             intentId: id,
             adminId: req.admin!.id,
@@ -184,6 +185,7 @@ export async function adminRoutes(app: FastifyInstance) {
             .select({ userId: depositIntents.userId })
             .from(depositIntents)
             .where(eq(depositIntents.id, id));
+        await reverifyIntentTransfers(db, id);
         const r = await activateDeposit(db, {
             intentId: id,
             adminId: req.admin!.id,

@@ -277,6 +277,8 @@ export const depositTransfers = pgTable(
         fromAddress: text("from_address"),
         amount: bigAmount("amount").notNull(),
         blockNumber: bigAmount("block_number"),
+        blockHash: text("block_hash"),
+        verifiedAt: timestamp("verified_at", { withTimezone: true }),
         // Evidence only. Earning starts at sweep confirmation.
         blockTimestamp: timestamp("block_timestamp", { withTimezone: true }),
         intentId: uuid("intent_id").references(() => depositIntents.id),
@@ -635,3 +637,14 @@ export const poolSnapshots = pgTable(
         index("pool_snapshots_time_idx").on(t.poolId, t.takenAt),
     ],
 );
+
+// Per-chain scan cursor for the background transfer scanner.
+export const chainScanState = pgTable("chain_scan_state", {
+    id: uuid("id").primaryKey().defaultRandom(),
+    chainId: uuid("chain_id")
+        .notNull()
+        .unique()
+        .references(() => chains.id),
+    lastScannedBlock: bigAmount("last_scanned_block").notNull(),
+    updatedAt: updatedAt(),
+});
