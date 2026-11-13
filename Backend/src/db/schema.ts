@@ -565,3 +565,73 @@ export const relockItems = pgTable(
         index("relock_items_status_idx").on(t.status),
     ],
 );
+
+/* ------------------------------------------------------------------ */
+/* Balance history (for historical APY and charts)                     */
+/* ------------------------------------------------------------------ */
+
+// One row per user per settlement: participant value right after the
+// settlement (price update, maturity, relocks) and BEFORE that action's
+// deposit/withdrawal flows. Manager-pool holdings are excluded.
+export const userBalanceSnapshots = pgTable(
+    "user_balance_snapshots",
+    {
+        id: uuid("id").primaryKey().defaultRandom(),
+        userId: uuid("user_id")
+            .notNull()
+            .references(() => users.id),
+        settlementId: uuid("settlement_id")
+            .notNull()
+            .references(() => settlements.id),
+        takenAt: timestamp("taken_at", { withTimezone: true }).notNull(),
+        valueUsd: bigAmount("value_usd").notNull(),
+        principalUsd: bigAmount("principal_usd").notNull(),
+        liquidValueUsd: bigAmount("liquid_value_usd").notNull(),
+        lockedValueUsd: bigAmount("locked_value_usd").notNull(),
+    },
+    (t) => [
+        uniqueIndex("ubs_user_settlement_unique").on(t.userId, t.settlementId),
+        index("ubs_user_time_idx").on(t.userId, t.takenAt),
+    ],
+);
+
+// External cash flows applied right after a settlement. Signed micro-USD:
+// deposits positive, withdrawals negative (gross value burned).
+// kind: deposit | withdrawal. Relocks and maturities are not flows.
+export const userFlows = pgTable(
+    "user_flows",
+    {
+        id: uuid("id").primaryKey().defaultRandom(),
+        userId: uuid("user_id")
+            .notNull()
+            .references(() => users.id),
+        settlementId: uuid("settlement_id")
+            .notNull()
+            .references(() => settlements.id),
+        kind: text("kind").notNull(),
+        amountUsd: bigAmount("amount_usd").notNull(),
+        createdAt: createdAt(),
+    },
+    (t) => [index("user_flows_user_idx").on(t.userId, t.settlementId)],
+);
+
+// Pool NAV and shares after every settlement (admin gross performance).
+export const poolSnapshots = pgTable(
+    "pool_snapshots",
+    {
+        id: uuid("id").primaryKey().defaultRandom(),
+        settlementId: uuid("settlement_id")
+            .notNull()
+            .references(() => settlements.id),
+        poolId: uuid("pool_id")
+            .notNull()
+            .references(() => pools.id),
+        takenAt: timestamp("taken_at", { withTimezone: true }).notNull(),
+        totalAssetsUsd: bigAmount("total_assets_usd").notNull(),
+        totalShares: bigAmount("total_shares").notNull(),
+    },
+    (t) => [
+        uniqueIndex("pool_snapshots_unique").on(t.settlementId, t.poolId),
+        index("pool_snapshots_time_idx").on(t.poolId, t.takenAt),
+    ],
+);
