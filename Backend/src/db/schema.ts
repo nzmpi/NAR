@@ -649,3 +649,31 @@ export const chainScanState = pgTable("chain_scan_state", {
     lastScannedBlock: bigAmount("last_scanned_block").notNull(),
     updatedAt: updatedAt(),
 });
+
+export const notificationOutbox = pgTable(
+    "notification_outbox",
+    {
+        id: uuid("id").primaryKey().defaultRandom(),
+        userId: uuid("user_id")
+            .notNull()
+            .references(() => users.id),
+        text: text("text").notNull(),
+        status: text("status").notNull().default("pending"), // pending | sent | failed
+        attempts: integer("attempts").notNull().default(0),
+        nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        lastError: text("last_error"),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        sentAt: timestamp("sent_at", { withTimezone: true }),
+    },
+    (t) => [
+        index("notification_outbox_due_idx").on(t.status, t.nextAttemptAt),
+        check(
+            "notification_outbox_status_chk",
+            sql`${t.status} in ('pending','sent','failed')`,
+        ),
+    ],
+);

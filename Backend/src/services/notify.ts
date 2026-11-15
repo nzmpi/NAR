@@ -1,7 +1,5 @@
-import { eq } from "drizzle-orm";
-import { config } from "../config.js";
 import { db } from "../db/index.js";
-import { users } from "../db/schema.js";
+import { enqueueNotification } from "./outbox.js";
 
 type Log = { error: (...a: unknown[]) => void };
 
@@ -12,24 +10,11 @@ export function fmtUsd(micro: bigint): string {
     return `${whole.toString()}.${cents.toString().padStart(2, "0")}`;
 }
 
-// Best effort: a failed notification never fails the money operation.
+// Queues the message; the outbox worker delivers it with retries.
+// A failed enqueue never fails the money operation.
 export async function notifyUser(userId: string, text: string, log: Log) {
     try {
-        const [u] = await db
-            .select({ tg: users.telegramId })
-            .from(users)
-            .where(eq(users.id, userId))
-            .limit(1);
-        if (!u) return;
-        const res = await fetch(
-            `https://api.telegram.org/bot${config.BOT_TOKEN}/sendMessage`,
-            {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ chat_id: u.tg, text }),
-            },
-        );
-        if (!res.ok) log.error(`telegram notify failed: ${res.status}`);
+        await enqueueNotification(db, userId, text);
     } catch (e) {
         log.error(e);
     }
