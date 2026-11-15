@@ -39,9 +39,18 @@ const schema = z.object({
     // Number of reverse-proxy hops in front of the API (0 = none). Needed for the real client IP.
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
     RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(120), // per IP
+
+    // Bot: "off" | "polling" (dev) | "webhook" (prod).
+    BOT_MODE: z.enum(["off", "polling", "webhook"]).default("off"),
+    MINI_APP_URL: opt(z.url()),
+    // Webhook mode: full public URL of POST /telegram/webhook, and a secret (A-Z a-z 0-9 _ -).
+    WEBHOOK_URL: opt(z.url()),
+    WEBHOOK_SECRET: opt(z.string().regex(/^[A-Za-z0-9_-]{16,256}$/)),
 });
 
 const env = schema.parse(process.env);
+if (env.BOT_MODE === "webhook" && (!env.WEBHOOK_URL || !env.WEBHOOK_SECRET))
+    throw new Error("BOT_MODE=webhook requires WEBHOOK_URL and WEBHOOK_SECRET");
 const adminOrigin = new URL(env.ADMIN_ORIGIN).origin;
 const rpcUrls: Record<number, string[]> = {};
 for (const [k, v] of Object.entries(process.env)) {

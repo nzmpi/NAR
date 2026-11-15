@@ -10,6 +10,7 @@ import { registerErrorHandler } from "./http/errors.js";
 import { adminAuthRoutes } from "./http/routes/adminAuth.js";
 import { adminRoutes } from "./http/routes/admin.js";
 import { userRoutes } from "./http/routes/user.js";
+import { registerBotWebhook } from "./bot/bot.js";
 
 // bigint -> JSON string (money is exchanged as integer strings).
 (BigInt.prototype as any).toJSON = function (this: bigint) {
@@ -65,5 +66,6 @@ export async function buildApp() {
     await app.register(userRoutes);
     await app.register(adminAuthRoutes);
     await app.register(adminRoutes);
+    registerBotWebhook(app);
     return app;
 }
