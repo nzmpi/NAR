@@ -1,15 +1,3 @@
-# Compiler files
-Foundry/cache/
-Foundry/out/
-
-# Ignores development broadcast logs
-!/broadcast
-Foundry/broadcast/*/31337/
-Foundry/broadcast/**/dry-run/
-
-# Docs
-Foundry/docs/
-
 # Dotenv file
 .env
 
