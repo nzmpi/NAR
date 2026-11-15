@@ -52,6 +52,10 @@ const STATUS: Record<string, [string, string]> = {
     rejected: ["Rejected", "var(--bad)"],
     expired: ["Expired", "var(--hint)"],
     cancelled: ["Cancelled", "var(--hint)"],
+    pending: ["Pending review", "var(--warn)"],
+    paid: ["Paid", "var(--good)"],
+    applied: ["Applied", "var(--good)"],
+    failed: ["Failed", "var(--bad)"],
 };
 export const StatusBadge = ({ status }: { status: string }) => {
     const [label, color] = STATUS[status] ?? [status, "var(--hint)"];

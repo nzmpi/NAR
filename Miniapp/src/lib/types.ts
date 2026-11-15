@@ -86,3 +86,48 @@ export interface Intent {
     createdAt: string;
     allocations: { pool: PoolKey; bps: number }[];
 }
+export interface PayoutAddress {
+    address: string;
+    lastUsedAt: string;
+}
+export interface WithdrawalQuote {
+    grossUsd: string;
+    feeUsd: string;
+    netUsd: string;
+    payoutAmount: string;
+    lots: {
+        lotId: string;
+        poolKey: PoolKey;
+        grossUsd: string;
+        feeUsd: string;
+        netUsd: string;
+        early: boolean;
+    }[];
+}
+export interface WithdrawalRow {
+    id: string;
+    assetId: string;
+    destinationAddress: string;
+    grossAmountUsd: string;
+    earlyFeeUsd: string;
+    netPayoutUsd: string;
+    payoutAmount: string;
+    status: string;
+    rejectionReason: string | null;
+    txHash: string | null;
+    createdAt: string;
+}
+export interface RelockRow {
+    id: string;
+    status: string;
+    createdAt: string;
+    items: {
+        id: string;
+        targetPool: PoolKey | undefined;
+        status: string;
+        failureReason: string | null;
+        amountUsd: string | null;
+        isMax: boolean;
+        appliedUsd: string | null;
+    }[];
+}

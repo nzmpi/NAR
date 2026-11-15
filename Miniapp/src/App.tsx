@@ -4,10 +4,16 @@ import { api, getInitData } from "./lib/api";
 import { ErrorText, Hint } from "./components/ui";
 import { Home } from "./screens/Home";
 import { Deposit } from "./screens/Deposit";
+import { Withdraw } from "./screens/Withdraw";
+import { Relock } from "./screens/Relock";
+import { History } from "./screens/History";
 
 const TABS = [
     { id: "home", label: "Home" },
     { id: "deposit", label: "Deposit" },
+    { id: "withdraw", label: "Withdraw" },
+    { id: "relock", label: "Relock" },
+    { id: "history", label: "History" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
 
@@ -43,6 +49,9 @@ export default function App() {
         <div className="max-w-xl mx-auto px-4 pt-4 pb-24">
             {tab === "home" && <Home />}
             {tab === "deposit" && <Deposit />}
+            {tab === "withdraw" && <Withdraw />}
+            {tab === "relock" && <Relock />}
+            {tab === "history" && <History />}
             <nav className="fixed bottom-0 inset-x-0 bg-[var(--bg)] border-t border-[var(--hint)]/30 pb-[env(safe-area-inset-bottom)]">
                 <div className="max-w-xl mx-auto flex">
                     {TABS.map((t) => (
