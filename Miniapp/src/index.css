@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+:root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --bg2: var(--tg-theme-secondary-bg-color, #f2f3f5);
+    --fg: var(--tg-theme-text-color, #111111);
+    --hint: var(--tg-theme-hint-color, #7d8590);
+    --link: var(--tg-theme-link-color, #2481cc);
+    --btn: var(--tg-theme-button-color, #2481cc);
+    --btn-fg: var(--tg-theme-button-text-color, #ffffff);
+    --good: #2e9e5b;
+    --bad: #d64545;
+    --warn: #c98a12;
+}
+
+html, body, #root { min-height: 100%; }
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+}
+input, select, button { font: inherit; color: inherit; }
+.tnum { font-variant-numeric: tabular-nums; }
