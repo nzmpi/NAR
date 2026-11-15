@@ -44,7 +44,6 @@ assert(
     "liquid +6%",
 );
 assert(r.pools.lock_3m.assets >= 1_099_999_000n, "3m +10%");
-console.log("manager", r.pools.manager.assets);
 
 // Bonus 100 to a 3m lot
 const rb = settle({
@@ -129,4 +128,4 @@ assert(
     totalAssets(w.pools) === totalAssets(p) - 360n * U,
     "withdrawal: NAV drops by net only",
 );
-console.log("all good");
+console.log("accounting ok");

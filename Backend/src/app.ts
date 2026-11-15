@@ -1,4 +1,6 @@
 import Fastify from "fastify";
+import helmet from "@fastify/helmet";
+import rateLimit from "@fastify/rate-limit";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import { sql } from "drizzle-orm";
@@ -8,6 +10,7 @@ import { registerErrorHandler } from "./http/errors.js";
 import { adminAuthRoutes } from "./http/routes/adminAuth.js";
 import { adminRoutes } from "./http/routes/admin.js";
 import { userRoutes } from "./http/routes/user.js";
+import { registerBotWebhook } from "./bot/bot.js";
 
 // bigint -> JSON string (money is exchanged as integer strings).
 (BigInt.prototype as any).toJSON = function (this: bigint) {
@@ -15,8 +18,24 @@ import { userRoutes } from "./http/routes/user.js";
 };
 
 export async function buildApp() {
-    const app = Fastify({ logger: true });
+    const app = Fastify({
+        logger: true,
+        trustProxy:
+            config.TRUST_PROXY_HOPS > 0
+                ? String(config.TRUST_PROXY_HOPS)
+                : false,
+        bodyLimit: 64 * 1024,
+        requestTimeout: 30_000,
+        connectionTimeout: 30_000,
+    });
 
+    await app.register(helmet);
+    await app.register(rateLimit, {
+        global: true,
+        max: config.RATE_LIMIT_PER_MINUTE,
+        timeWindow: "1 minute",
+        allowList: (req) => req.url === "/health",
+    });
     await app.register(cookie);
     await app.register(cors, {
         origin: config.CORS_ORIGIN_LIST,
@@ -47,5 +66,6 @@ export async function buildApp() {
     await app.register(userRoutes);
     await app.register(adminAuthRoutes);
     await app.register(adminRoutes);
+    registerBotWebhook(app);
     return app;
 }

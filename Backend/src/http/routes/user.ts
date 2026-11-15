@@ -10,6 +10,7 @@ import {
     poolKey,
     uuid,
     evmAddress,
+    txHash,
 } from "../schemas.js";
 import {
     approveAmount,
@@ -32,6 +33,12 @@ import {
     listUserWithdrawals,
 } from "../../services/queries.js";
 import { computePerformance } from "../../services/history.js";
+import {
+    attachTxToIntent,
+    checkIntent,
+} from "../../services/transferScanner.js";
+import { ensureVaults } from "../../services/vaults.js";
+import { userLimit } from "../limits.js";
 
 const intentBody = z.object({
     vaultId: uuid,
@@ -79,13 +86,16 @@ const relockBody = z.object({
 });
 
 export async function userRoutes(app: FastifyInstance) {
-    const auth = { preHandler: requireUser };
+    const auth = { preHandler: [requireUser, userLimit("read", 120)] };
+    const write = { preHandler: [requireUser, userLimit("write", 20)] };
+    const chain = { preHandler: [requireUser, userLimit("chain", 6)] }; // RPC-hitting
 
     app.get("/me", auth, async (req) => req.user);
     app.get("/assets", auth, async () => listAssets(db));
-    app.get("/me/vaults", auth, async (req) =>
-        listUserVaults(db, req.user!.id),
-    );
+    app.get("/me/vaults", auth, async (req) => {
+        await ensureVaults(db, req.user!.id);
+        return listUserVaults(db, req.user!.id);
+    });
     app.get("/me/portfolio", auth, async (req) =>
         getPortfolio(db, req.user!.id),
     );
@@ -103,7 +113,7 @@ export async function userRoutes(app: FastifyInstance) {
         listUserDeposits(db, req.user!.id),
     );
 
-    app.post("/me/deposits/intents", auth, async (req, reply) => {
+    app.post("/me/deposits/intents", write, async (req, reply) => {
         const b = intentBody.parse(req.body);
         const r = await idempotent(req, req.user!.id, 201, () =>
             createIntent(db, {
@@ -120,7 +130,7 @@ export async function userRoutes(app: FastifyInstance) {
         return reply.code(r.status).send(r.body);
     });
 
-    app.post("/me/deposits/intents/:id/cancel", auth, async (req, reply) => {
+    app.post("/me/deposits/intents/:id/cancel", write, async (req, reply) => {
         const { id } = idParam.parse(req.params);
         await cancelIntent(db, id, req.user!.id);
         return reply.code(204).send();
@@ -128,13 +138,28 @@ export async function userRoutes(app: FastifyInstance) {
 
     app.post(
         "/me/deposits/intents/:id/approve-amount",
-        auth,
+        write,
         async (req, reply) => {
             const { id } = idParam.parse(req.params);
             await approveAmount(db, { intentId: id, userId: req.user!.id });
             return reply.code(204).send();
         },
     );
+
+    app.post("/me/deposits/intents/:id/check", chain, async (req) => {
+        const { id } = idParam.parse(req.params);
+        return checkIntent(db, id, req.user!.id);
+    });
+
+    app.post("/me/deposits/intents/:id/tx-hash", chain, async (req) => {
+        const { id } = idParam.parse(req.params);
+        const b = z.object({ txHash }).parse(req.body);
+        return attachTxToIntent(db, {
+            intentId: id,
+            userId: req.user!.id,
+            txHash: b.txHash,
+        });
+    });
 
     /* withdrawals */
     app.get("/me/withdrawals", auth, async (req) =>
@@ -144,12 +169,12 @@ export async function userRoutes(app: FastifyInstance) {
         listPayoutAddresses(db, req.user!.id),
     );
 
-    app.post("/me/withdrawals/preview", auth, async (req) => {
+    app.post("/me/withdrawals/preview", write, async (req) => {
         const b = withdrawalBody.parse(req.body);
         return previewWithdrawal(db, { userId: req.user!.id, ...b });
     });
 
-    app.post("/me/withdrawals", auth, async (req, reply) => {
+    app.post("/me/withdrawals", write, async (req, reply) => {
         const b = withdrawalBody.parse(req.body);
         const r = await idempotent(req, req.user!.id, 201, () =>
             requestWithdrawal(db, { userId: req.user!.id, ...b }),
@@ -157,7 +182,7 @@ export async function userRoutes(app: FastifyInstance) {
         return reply.code(r.status).send(r.body);
     });
 
-    app.post("/me/withdrawals/:id/cancel", auth, async (req, reply) => {
+    app.post("/me/withdrawals/:id/cancel", write, async (req, reply) => {
         const { id } = idParam.parse(req.params);
         await cancelWithdrawal(db, { withdrawalId: id, userId: req.user!.id });
         return reply.code(204).send();
@@ -168,7 +193,7 @@ export async function userRoutes(app: FastifyInstance) {
         listUserRelocks(db, req.user!.id),
     );
 
-    app.post("/me/relocks", auth, async (req, reply) => {
+    app.post("/me/relocks", write, async (req, reply) => {
         const b = relockBody.parse(req.body);
         const r = await idempotent(req, req.user!.id, 201, () =>
             requestRelock(db, {
@@ -184,7 +209,7 @@ export async function userRoutes(app: FastifyInstance) {
         return reply.code(r.status).send(r.body);
     });
 
-    app.post("/me/relocks/:id/cancel", auth, async (req, reply) => {
+    app.post("/me/relocks/:id/cancel", write, async (req, reply) => {
         const { id } = idParam.parse(req.params);
         await cancelRelock(db, { requestId: id, userId: req.user!.id });
         return reply.code(204).send();

@@ -202,18 +202,27 @@ export async function computePerformance(
         times.set(s.settlementId, s.takenAt);
         value.set(s.settlementId, BigInt(s.valueUsd));
     }
-    const missing = [...flowBy.keys()].filter((id) => !times.has(id));
-    if (missing.length) {
+    const start = new Map<string, number>();
+    const allIds = [...new Set([...flowBy.keys(), ...value.keys()])];
+    if (allIds.length) {
         const rows = await database
-            .select({ id: settlements.id, settledAt: settlements.settledAt })
+            .select({
+                id: settlements.id,
+                settledAt: settlements.settledAt,
+                intervalStart: settlements.intervalStart,
+            })
             .from(settlements)
-            .where(inArray(settlements.id, missing));
-        for (const r of rows) times.set(r.id, r.settledAt);
+            .where(inArray(settlements.id, allIds));
+        for (const r of rows) {
+            times.set(r.id, r.settledAt);
+            start.set(r.id, r.intervalStart.getTime());
+        }
     }
 
     const ids = [...times.keys()].sort(
         (a, b) =>
             times.get(a)!.getTime() - times.get(b)!.getTime() ||
+            (start.get(a) ?? 0) - (start.get(b) ?? 0) ||
             (a < b ? -1 : 1),
     );
     const nodes: (Node & { balanceUsd: bigint })[] = [];

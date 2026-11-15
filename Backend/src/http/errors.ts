@@ -39,6 +39,11 @@ export function registerErrorHandler(app: FastifyInstance) {
                 .code(503)
                 .send({ error: "Busy, please retry", code: "retry" });
 
+        if (err.statusCode === 429)
+            return reply
+                .code(429)
+                .send({ error: "Too many requests", code: "rate_limited" });
+
         if (err.statusCode && err.statusCode < 500)
             return reply
                 .code(err.statusCode)

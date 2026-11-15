@@ -322,3 +322,4 @@ await rejects(
     "backdated settlement rejected",
 );
 console.log("integration ok");
+process.exit(0);

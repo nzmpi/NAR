@@ -32,6 +32,7 @@ export const users = pgTable("users", {
     id: uuid("id").primaryKey().defaultRandom(),
     telegramId: text("telegram_id").notNull().unique(),
     username: text("username"),
+    maxVaults: integer("max_vaults").notNull().default(1),
     isBlocked: boolean("is_blocked").notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -277,6 +278,8 @@ export const depositTransfers = pgTable(
         fromAddress: text("from_address"),
         amount: bigAmount("amount").notNull(),
         blockNumber: bigAmount("block_number"),
+        blockHash: text("block_hash"),
+        verifiedAt: timestamp("verified_at", { withTimezone: true }),
         // Evidence only. Earning starts at sweep confirmation.
         blockTimestamp: timestamp("block_timestamp", { withTimezone: true }),
         intentId: uuid("intent_id").references(() => depositIntents.id),
@@ -633,5 +636,44 @@ export const poolSnapshots = pgTable(
     (t) => [
         uniqueIndex("pool_snapshots_unique").on(t.settlementId, t.poolId),
         index("pool_snapshots_time_idx").on(t.poolId, t.takenAt),
+    ],
+);
+
+// Per-chain scan cursor for the background transfer scanner.
+export const chainScanState = pgTable("chain_scan_state", {
+    id: uuid("id").primaryKey().defaultRandom(),
+    chainId: uuid("chain_id")
+        .notNull()
+        .unique()
+        .references(() => chains.id),
+    lastScannedBlock: bigAmount("last_scanned_block").notNull(),
+    updatedAt: updatedAt(),
+});
+
+export const notificationOutbox = pgTable(
+    "notification_outbox",
+    {
+        id: uuid("id").primaryKey().defaultRandom(),
+        userId: uuid("user_id")
+            .notNull()
+            .references(() => users.id),
+        text: text("text").notNull(),
+        status: text("status").notNull().default("pending"), // pending | sent | failed
+        attempts: integer("attempts").notNull().default(0),
+        nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        lastError: text("last_error"),
+        createdAt: timestamp("created_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        sentAt: timestamp("sent_at", { withTimezone: true }),
+    },
+    (t) => [
+        index("notification_outbox_due_idx").on(t.status, t.nextAttemptAt),
+        check(
+            "notification_outbox_status_chk",
+            sql`${t.status} in ('pending','sent','failed')`,
+        ),
     ],
 );
