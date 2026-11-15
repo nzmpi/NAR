@@ -27,8 +27,11 @@ const safeEqual = (a: string, b: string) => {
 const fail = () => new AppError("Login failed", 401, "login_failed");
 
 export async function adminAuthRoutes(app: FastifyInstance) {
+    const strict = {
+        config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+    };
     // Register ADMIN_CALLBACK_URL as an allowed redirect URL in BotFather.
-    app.get("/admin/auth/login", async (_req, reply) => {
+    app.get("/admin/auth/login", strict, async (_req, reply) => {
         const state = randomBytes(16).toString("base64url");
         const nonce = randomBytes(16).toString("base64url");
         const { verifier, challenge } = pkcePair();
@@ -47,7 +50,7 @@ export async function adminAuthRoutes(app: FastifyInstance) {
         return reply.redirect(buildAuthUrl({ state, nonce, challenge }));
     });
 
-    app.get("/admin/auth/callback", async (req, reply) => {
+    app.get("/admin/auth/callback", strict, async (req, reply) => {
         const q = z
             .object({ code: z.string().min(1), state: z.string().min(1) })
             .safeParse(req.query);

@@ -35,6 +35,10 @@ const schema = z.object({
     FACTORY_ADDRESS: opt(z.string().regex(/^0x[a-fA-F0-9]{40}$/)),
     VAULT_ARTIFACT_PATH: opt(z.string().min(1)),
     VAULT_CREATION_CODE_HASH: opt(z.string().regex(/^0x[a-fA-F0-9]{64}$/)),
+
+    // Number of reverse-proxy hops in front of the API (0 = none). Needed for the real client IP.
+    TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
+    RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(120), // per IP
 });
 
 const env = schema.parse(process.env);
