@@ -481,11 +481,8 @@ export function markWithdrawalPaid(
                 .where(eq(positionLots.id, a.positionLotId))
                 .for("update");
             const key = keyById.get(lot.poolId)!;
-            // Fee was fixed at approval: early if the lot was still locked then.
-            const early =
-                LOCK_KEYS.includes(key as LockKey) &&
-                lot.maturesAt !== null &&
-                lot.maturesAt.getTime() > w.createdAt.getTime();
+            // Fee was fixed at approval: early iff a fee was quoted then.
+            const early = BigInt(a.earlyFeeUsd) > 0n;
 
             const f = finalizeWithdrawalLot(
                 state[key],
