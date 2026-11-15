@@ -78,6 +78,7 @@ export function listUserVaults(database: Database, userId: string) {
             chainUuid: chains.id,
             chainName: chains.name,
             chainId: chains.chainId,
+            nonce: vaults.nonce,
         })
         .from(vaults)
         .innerJoin(chains, eq(chains.id, vaults.chainId))

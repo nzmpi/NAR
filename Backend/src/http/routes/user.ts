@@ -37,6 +37,7 @@ import {
     attachTxToIntent,
     checkIntent,
 } from "../../services/transferScanner.js";
+import { ensureVaults } from "../../services/vaults.js";
 
 const intentBody = z.object({
     vaultId: uuid,
@@ -88,9 +89,10 @@ export async function userRoutes(app: FastifyInstance) {
 
     app.get("/me", auth, async (req) => req.user);
     app.get("/assets", auth, async () => listAssets(db));
-    app.get("/me/vaults", auth, async (req) =>
-        listUserVaults(db, req.user!.id),
-    );
+    app.get("/me/vaults", auth, async (req) => {
+        await ensureVaults(db, req.user!.id);
+        return listUserVaults(db, req.user!.id);
+    });
     app.get("/me/portfolio", auth, async (req) =>
         getPortfolio(db, req.user!.id),
     );

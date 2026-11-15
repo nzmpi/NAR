@@ -43,6 +43,13 @@
       "when": 1794573664686,
       "tag": "0005_majestic_ghost_rider",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794694925678,
+      "tag": "0006_right_odin",
+      "breakpoints": true
     }
   ]
 }

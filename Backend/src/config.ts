@@ -1,6 +1,9 @@
 import "dotenv/config";
 import { z } from "zod";
 
+const opt = <T extends z.ZodType>(t: T) =>
+    z.preprocess((v) => (v === "" ? undefined : v), t.optional());
+
 const schema = z.object({
     PORT: z.coerce.number().int().default(3000),
     HOST: z.string().default("127.0.0.1"),
@@ -27,6 +30,10 @@ const schema = z.object({
     SCAN_LOOKBACK_BLOCKS: z.coerce.number().int().positive().default(50000),
     LOG_CHUNK_BLOCKS: z.coerce.number().int().positive().default(2000),
     REORG_OVERLAP_BLOCKS: z.coerce.number().int().min(0).default(30),
+
+    FACTORY_ADDRESS: opt(z.string().regex(/^0x[a-fA-F0-9]{40}$/)),
+    VAULT_ARTIFACT_PATH: opt(z.string().min(1)),
+    VAULT_CREATION_CODE_HASH: opt(z.string().regex(/^0x[a-fA-F0-9]{64}$/)),
 });
 
 const env = schema.parse(process.env);

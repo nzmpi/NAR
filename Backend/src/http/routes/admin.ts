@@ -38,6 +38,17 @@ import {
 } from "../../services/queries.js";
 import { AppError } from "../../errors.js";
 import { adminPerformance } from "../../services/history.js";
+import {
+    createNextVault,
+    getVaultBalances,
+    listVaultsAdmin,
+    markVaultDeployed,
+    syncVaultDeployment,
+} from "../../services/vaults.js";
+import {
+    buildDeployBatch,
+    buildSweepBatch,
+} from "../../services/safeCalldata.js";
 
 const statusQuery = z.object({ status: z.string().max(40).optional() });
 
@@ -145,6 +156,11 @@ export async function adminRoutes(app: FastifyInstance) {
             .parse(req.body);
         await reverifyIntentTransfers(db, id);
         await verifySweepTx(db, id, b.sweepTxHash);
+        const [iv] = await db
+            .select({ vaultId: depositIntents.vaultId })
+            .from(depositIntents)
+            .where(eq(depositIntents.id, id));
+        if (iv) await syncVaultDeployment(db, iv.vaultId);
         const r = await recordSweep(db, {
             intentId: id,
             adminId: req.admin!.id,
@@ -296,36 +312,54 @@ export async function adminRoutes(app: FastifyInstance) {
 
     // Registers a user's (counterfactual) vault address. Address derivation
     // from Factory + salt is not automated yet.
-    app.post("/admin/vaults", auth, async (req, reply) => {
-        const b = z
-            .object({
-                userId: uuid,
-                chainId: uuid,
-                nonce: z.number().int().nonnegative().default(0),
-                address: evmAddress,
-            })
-            .parse(req.body);
-        const [v] = await db
-            .insert(vaults)
-            .values({ ...b, address: b.address.toLowerCase() })
-            .returning();
-        await audit(req.admin!.id, "vault.registered", "vault", v.id, b);
-        return reply.code(201).send(v);
+    app.get("/admin/vaults", auth, async (req) => {
+        const q = z.object({ userId: uuid.optional() }).parse(req.query);
+        return listVaultsAdmin(db, q.userId);
+    });
+
+    app.post("/admin/users/:id/vaults", auth, async (req, reply) => {
+        const { id } = idParam.parse(req.params);
+        return reply
+            .code(201)
+            .send(await createNextVault(db, id, req.admin!.id));
     });
 
     app.post("/admin/vaults/:id/deployed", auth, async (req, reply) => {
         const { id } = idParam.parse(req.params);
         const b = z.object({ deployTxHash: txHash }).parse(req.body);
-        const r = await db
-            .update(vaults)
-            .set({
-                isDeployed: true,
-                deployTxHash: b.deployTxHash.toLowerCase(),
-            })
-            .where(eq(vaults.id, id))
-            .returning({ id: vaults.id });
-        if (!r.length) throw new AppError("Vault not found", 404, "not_found");
-        await audit(req.admin!.id, "vault.deployed", "vault", id, b);
+        await markVaultDeployed(db, id, req.admin!.id, b.deployTxHash);
         return reply.code(204).send();
+    });
+
+    app.get("/admin/vaults/:id/balances", auth, async (req) => {
+        const { id } = idParam.parse(req.params);
+        return getVaultBalances(db, id);
+    });
+
+    app.post("/admin/vaults/deploy-calldata", auth, async (req) => {
+        const b = z
+            .object({ vaultIds: z.array(uuid).min(1).max(50) })
+            .parse(req.body);
+        return buildDeployBatch(db, b.vaultIds);
+    });
+
+    app.post("/admin/vaults/:id/sweep-calldata", auth, async (req) => {
+        const { id } = idParam.parse(req.params);
+        const b = z
+            .object({
+                to: evmAddress,
+                items: z
+                    .array(
+                        z.object({
+                            assetId: uuid,
+                            amount: z.union([big, z.literal("max")]),
+                        }),
+                    )
+                    .max(10)
+                    .default([]),
+                includeNative: z.boolean().default(false),
+            })
+            .parse(req.body);
+        return buildSweepBatch(db, { vaultId: id, ...b });
     });
 }

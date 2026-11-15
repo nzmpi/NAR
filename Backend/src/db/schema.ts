@@ -32,6 +32,7 @@ export const users = pgTable("users", {
     id: uuid("id").primaryKey().defaultRandom(),
     telegramId: text("telegram_id").notNull().unique(),
     username: text("username"),
+    maxVaults: integer("max_vaults").notNull().default(1),
     isBlocked: boolean("is_blocked").notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
