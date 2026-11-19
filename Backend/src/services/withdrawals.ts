@@ -419,6 +419,7 @@ export function markWithdrawalPaid(
         adminId: string;
         txHash: string;
         reportedTotalUsd: bigint;
+        confirmLargeMove?: boolean;
         now?: Date;
     },
 ) {
@@ -456,6 +457,7 @@ export function markWithdrawalPaid(
             reportedTotalUsd: i.reportedTotalUsd,
             kind: "pre_action",
             note: `withdrawal ${w.id}`,
+            confirmLargeMove: i.confirmLargeMove,
             now: i.now,
         });
         const now = settled.now;

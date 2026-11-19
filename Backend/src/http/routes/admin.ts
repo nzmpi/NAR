@@ -96,6 +96,7 @@ export async function adminRoutes(app: FastifyInstance) {
                     .max(100)
                     .optional(),
                 note: z.string().max(500).optional(),
+                confirmLargeMove: z.boolean().optional(),
             })
             .parse(req.body);
         const r = await settleManual(db, { adminId: req.admin!.id, ...b });
@@ -158,7 +159,7 @@ export async function adminRoutes(app: FastifyInstance) {
             .object({ sweepTxHash: txHash, confirmedAmount: big.optional() })
             .parse(req.body);
         await reverifyIntentTransfers(db, id);
-        await verifySweepTx(db, id, b.sweepTxHash);
+        const sweptAmount = await verifySweepTx(db, id, b.sweepTxHash);
         const [iv] = await db
             .select({ vaultId: depositIntents.vaultId })
             .from(depositIntents)
@@ -167,6 +168,7 @@ export async function adminRoutes(app: FastifyInstance) {
         const r = await recordSweep(db, {
             intentId: id,
             adminId: req.admin!.id,
+            sweptAmount,
             ...b,
         });
         if (r.status === "awaiting_user_approval") {

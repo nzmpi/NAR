@@ -1,4 +1,4 @@
-import { and, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, lt, ne, sql } from "drizzle-orm";
 import {
     admins,
     assets,
@@ -350,6 +350,8 @@ export function recordSweep(
         adminId: string;
         sweepTxHash: string;
         confirmedAmount?: bigint;
+        // From verifySweepTx; null/undefined = not verified (test env only).
+        sweptAmount?: bigint | null;
         now?: Date;
     },
 ) {
@@ -400,6 +402,32 @@ export function recordSweep(
                 400,
                 "bad_amount",
             );
+        // One sweep may cover several deposits in the vault, but the amounts
+        // recorded against it may never exceed what it moved.
+        if (i.sweptAmount != null) {
+            const [used] = await tx
+                .select({
+                    total: sql<string>`coalesce(sum(${depositIntents.confirmedAmount}), 0)`,
+                })
+                .from(depositIntents)
+                .where(
+                    and(
+                        eq(depositIntents.chainId, intent.chainId),
+                        eq(
+                            depositIntents.sweepTxHash,
+                            i.sweepTxHash.toLowerCase(),
+                        ),
+                        ne(depositIntents.status, "rejected"),
+                        ne(depositIntents.id, intent.id),
+                    ),
+                );
+            if (BigInt(used.total) + confirmed > i.sweptAmount)
+                throw new AppError(
+                    "Confirmed amount exceeds what the sweep transaction moved",
+                    400,
+                    "sweep_amount_mismatch",
+                );
+        }
         const confirmedUsd = tokenToUsd(confirmed, asset.decimals);
         if (confirmedUsd < MIN_DEPOSIT_USD)
             throw new AppError(
@@ -524,6 +552,7 @@ export function activateDeposit(
         intentId: string;
         adminId: string;
         reportedTotalUsd: bigint;
+        confirmLargeMove?: boolean;
         now?: Date;
     },
 ) {
@@ -558,6 +587,7 @@ export function activateDeposit(
             reportedTotalUsd: i.reportedTotalUsd,
             kind: "pre_action",
             note: `deposit ${intent.id}`,
+            confirmLargeMove: i.confirmLargeMove,
             now: i.now,
         });
         const now = settled.now;

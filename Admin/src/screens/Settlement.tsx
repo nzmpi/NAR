@@ -36,6 +36,7 @@ export function Settlement() {
                 method: "POST",
                 body: {
                     reportedTotalUsd,
+                    confirmLargeMove: checked || undefined,
                     note: note || undefined,
                     bonuses: bonuses.length
                         ? bonuses.map((b) => ({
@@ -65,7 +66,11 @@ export function Settlement() {
         diff !== null && current > 0n
             ? Number((diff * 10_000n) / current) / 100
             : null;
-    const big = pctChange !== null && Math.abs(pctChange) > 10;
+    // Same rule as the server's large_move check (> 10%).
+    const big =
+        diff !== null &&
+        current > 0n &&
+        (diff < 0n ? -diff : diff) * 10n > current;
     const bonusTotal = bonuses.reduce(
         (s, b) => s + (parseUnits(b.amount, 6) ?? 0n),
         0n,

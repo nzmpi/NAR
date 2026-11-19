@@ -109,6 +109,7 @@ const before = await h.totalNav();
 await settleManual(db, {
     adminId: admin.id,
     reportedTotalUsd: before + 10n * U,
+    confirmLargeMove: true,
     now: day(10),
 });
 ok(
@@ -188,6 +189,7 @@ const r3 = await requestRelock(db, {
 await settleManual(db, {
     adminId: admin.id,
     reportedTotalUsd: (await h.totalNav()) + 5n * U,
+    confirmLargeMove: true,
     now: day(15),
 });
 ok(

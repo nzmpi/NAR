@@ -36,6 +36,21 @@ const schema = z.object({
     VAULT_ARTIFACT_PATH: opt(z.string().min(1)),
     VAULT_CREATION_CODE_HASH: opt(z.string().regex(/^0x[a-fA-F0-9]{64}$/)),
 
+    // Allowed sweep destinations (treasury addresses), comma-separated.
+    // Required in prod; empty in test allows any address.
+    TREASURY_ADDRESSES: z
+        .string()
+        .default("")
+        .refine(
+            (s) =>
+                s
+                    .split(",")
+                    .map((a) => a.trim())
+                    .filter(Boolean)
+                    .every((a) => /^0x[a-fA-F0-9]{40}$/.test(a)),
+            "TREASURY_ADDRESSES must be comma-separated 0x addresses",
+        ),
+
     // Number of reverse-proxy hops in front of the API (0 = none). Needed for the real client IP.
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
     RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(120), // per IP
@@ -68,6 +83,9 @@ export const config = {
     ADMIN_POST_LOGIN_URL: env.ADMIN_POST_LOGIN_URL ?? adminOrigin,
     BOT_ID: env.BOT_TOKEN.split(":")[0],
     RPC_URLS: rpcUrls,
+    TREASURY_LIST: env.TREASURY_ADDRESSES.split(",")
+        .map((a) => a.trim().toLowerCase())
+        .filter(Boolean),
     COOKIE_SECURE: env.ADMIN_CALLBACK_URL.startsWith("https://"),
     CORS_ORIGIN_LIST: [
         adminOrigin,

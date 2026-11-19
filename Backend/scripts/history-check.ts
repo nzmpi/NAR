@@ -28,6 +28,7 @@ await h.deposit(
 await settleManual(db, {
     adminId: admin.id,
     reportedTotalUsd: 11_100n * U,
+    confirmLargeMove: true,
     now: day(30),
 });
 const up = await computePerformance(db, alice.id, "all", day(30));
@@ -41,6 +42,7 @@ ok(up.points.length >= 1, "performance has points");
 await settleManual(db, {
     adminId: admin.id,
     reportedTotalUsd: 10_000n * U,
+    confirmLargeMove: true,
     now: day(60),
 });
 const down = await computePerformance(db, alice.id, "all", day(60));

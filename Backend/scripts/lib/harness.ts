@@ -130,6 +130,7 @@ export async function setup() {
             intentId: intent.id,
             adminId: admin.id,
             reportedTotalUsd: totalBefore,
+            confirmLargeMove: true,
             now,
         });
         return intent.id as string;
