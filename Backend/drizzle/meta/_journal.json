@@ -57,6 +57,13 @@
       "when": 1794701579026,
       "tag": "0007_bored_nico_minoru",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1795121718709,
+      "tag": "0008_user_allowlist",
+      "breakpoints": true
     }
   ]
 }

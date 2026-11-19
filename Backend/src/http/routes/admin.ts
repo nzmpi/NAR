@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db/index.js";
 import {
@@ -7,6 +7,7 @@ import {
     auditLogs,
     chains,
     depositIntents,
+    userAllowlist,
     users,
     withdrawals,
 } from "../../db/schema.js";
@@ -408,6 +409,58 @@ export async function adminRoutes(app: FastifyInstance) {
         );
         return reply.code(204).send();
     });
+
+    /* sign-up allowlist (enforced in prod) */
+    const tgId = z.string().regex(/^[0-9]{1,20}$/);
+    app.get("/admin/allowlist", auth, async () =>
+        db.select().from(userAllowlist).orderBy(desc(userAllowlist.createdAt)),
+    );
+
+    app.post("/admin/allowlist", auth, async (req, reply) => {
+        const b = z
+            .object({
+                telegramId: tgId,
+                note: z.string().trim().max(100).optional(),
+            })
+            .parse(req.body);
+        const r = await db
+            .insert(userAllowlist)
+            .values({ ...b, addedBy: req.admin!.id })
+            .onConflictDoNothing()
+            .returning();
+        if (!r.length) return reply.code(204).send();
+        await audit(
+            req.admin!.id,
+            "allowlist.added",
+            "user_allowlist",
+            b.telegramId,
+            b,
+        );
+        return reply.code(201).send(r[0]);
+    });
+
+    app.post(
+        "/admin/allowlist/:telegramId/remove",
+        auth,
+        async (req, reply) => {
+            const { telegramId } = z
+                .object({ telegramId: tgId })
+                .parse(req.params);
+            const r = await db
+                .delete(userAllowlist)
+                .where(eq(userAllowlist.telegramId, telegramId))
+                .returning({ id: userAllowlist.telegramId });
+            if (r.length)
+                await audit(
+                    req.admin!.id,
+                    "allowlist.removed",
+                    "user_allowlist",
+                    telegramId,
+                    {},
+                );
+            return reply.code(204).send();
+        },
+    );
 
     app.get("/admin/chains", auth, async () =>
         db

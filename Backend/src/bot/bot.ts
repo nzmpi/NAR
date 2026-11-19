@@ -1,6 +1,8 @@
 import { Bot, InlineKeyboard, webhookCallback } from "grammy";
 import type { FastifyInstance } from "fastify";
 import { config } from "../config.js";
+import { db } from "../db/index.js";
+import { hasAccess } from "../services/allowlist.js";
 
 type Log = {
     error: (...a: unknown[]) => void;
@@ -26,12 +28,20 @@ export function getBot(): Bot {
               }
             : {};
 
-    const restricted = (id: number | undefined) =>
-        config.APP_ENV === "test" && String(id) !== config.OWNER_TELEGRAM_ID;
+    const restricted = async (id: number | undefined) =>
+        id === undefined ||
+        !(await hasAccess(
+            db,
+            {
+                appEnv: config.APP_ENV,
+                ownerTelegramId: config.OWNER_TELEGRAM_ID,
+            },
+            String(id),
+        ));
 
     priv.command("start", async (ctx) => {
-        if (restricted(ctx.from?.id))
-            return ctx.reply("This environment is restricted.");
+        if (await restricted(ctx.from?.id))
+            return ctx.reply("This bot is invite-only.");
         return ctx.reply(
             "Welcome to NAR.\n\nOpen the app to deposit, track your balance and request withdrawals.",
             open(),
@@ -39,8 +49,8 @@ export function getBot(): Bot {
     });
 
     priv.command("help", async (ctx) => {
-        if (restricted(ctx.from?.id))
-            return ctx.reply("This environment is restricted.");
+        if (await restricted(ctx.from?.id))
+            return ctx.reply("This bot is invite-only.");
         return ctx.reply(
             "Everything happens in the app: deposits, balance, history and withdrawals.\n" +
                 "You will get a message here when a deposit is confirmed or a withdrawal is paid.",
@@ -50,7 +60,7 @@ export function getBot(): Bot {
 
     // Anything else: point to the app.
     priv.on("message", async (ctx) => {
-        if (restricted(ctx.from?.id)) return;
+        if (await restricted(ctx.from?.id)) return;
         return ctx.reply("Use the button below to open the app.", open());
     });
 

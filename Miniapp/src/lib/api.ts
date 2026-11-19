@@ -24,6 +24,7 @@ const FRIENDLY: Record<string, string> = {
     rate_limited: "Too many requests. Wait a minute and try again.",
     test_env_restricted: "This environment is restricted.",
     blocked: "Your account is blocked.",
+    not_allowlisted: "This app is invite-only. Ask the owner to add you.",
     init_data_expired: "Session expired. Reopen the app.",
     bad_init_data: "Open this app from Telegram.",
 };
