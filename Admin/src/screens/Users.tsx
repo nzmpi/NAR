@@ -5,6 +5,7 @@ import { downloadJson } from "../lib/download";
 import { bpsPct, fmtUsd, formatUnits } from "../lib/money";
 import type {
     AdminUser,
+    AllowlistEntry,
     AdminUserPortfolio,
     AdminVault,
     VaultBalances,
@@ -37,6 +38,7 @@ export function Users() {
 
     return (
         <div className="space-y-3">
+            <Allowlist />
             <Input
                 placeholder="Search by @username, Telegram ID or user ID"
                 value={search}
@@ -64,6 +66,96 @@ export function Users() {
                 </Card>
             ))}
         </div>
+    );
+}
+
+function Allowlist() {
+    const qc = useQueryClient();
+    const [tg, setTg] = useState("");
+    const [note, setNote] = useState("");
+    const list = useQuery({
+        queryKey: ["admin-allowlist"],
+        queryFn: () => api<AllowlistEntry[]>("/admin/allowlist"),
+    });
+    const done = () => qc.invalidateQueries({ queryKey: ["admin-allowlist"] });
+    const add = useMutation({
+        mutationFn: () =>
+            api("/admin/allowlist", {
+                method: "POST",
+                body: { telegramId: tg.trim(), note: note.trim() || undefined },
+            }),
+        onSuccess: () => {
+            setTg("");
+            setNote("");
+            done();
+        },
+    });
+    const remove = useMutation({
+        mutationFn: (id: string) =>
+            api(`/admin/allowlist/${id}/remove`, { method: "POST" }),
+        onSuccess: done,
+    });
+
+    return (
+        <Card className="space-y-3">
+            <h3 className="font-medium">Invite allowlist</h3>
+            <Hint>
+                In prod only these Telegram IDs can sign up. Removing an ID
+                stops sign-up only; block the user to cut existing access.
+            </Hint>
+            <div className="flex flex-wrap gap-2">
+                <Input
+                    placeholder="Telegram ID"
+                    inputMode="numeric"
+                    value={tg}
+                    onChange={(e) => setTg(e.target.value)}
+                    className="font-mono"
+                />
+                <Input
+                    placeholder="Note (optional)"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                />
+                <Button
+                    disabled={!/^[0-9]{1,20}$/.test(tg.trim()) || add.isPending}
+                    onClick={() => add.mutate()}
+                >
+                    Add
+                </Button>
+            </div>
+            {list.data?.map((a) => (
+                <div
+                    key={a.telegramId}
+                    className="flex items-center justify-between text-sm"
+                >
+                    <span>
+                        <Mono>{a.telegramId}</Mono>
+                        {a.note && (
+                            <span className="text-[var(--hint)]">
+                                {" "}
+                                · {a.note}
+                            </span>
+                        )}
+                    </span>
+                    <Button
+                        variant="ghost"
+                        disabled={remove.isPending}
+                        onClick={() => {
+                            if (
+                                confirm(
+                                    `Remove ${a.telegramId} from the allowlist?`,
+                                )
+                            )
+                                remove.mutate(a.telegramId);
+                        }}
+                    >
+                        Remove
+                    </Button>
+                </div>
+            ))}
+            {list.data?.length === 0 && <Hint>No invited IDs.</Hint>}
+            <ErrorText error={list.error || add.error || remove.error} />
+        </Card>
     );
 }
 

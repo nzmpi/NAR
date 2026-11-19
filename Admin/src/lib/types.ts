@@ -147,6 +147,12 @@ export interface AdminAsset {
     chainId: number;
 }
 
+export interface AllowlistEntry {
+    telegramId: string;
+    note: string | null;
+    createdAt: string;
+}
+
 export interface AdminUser {
     id: string;
     telegramId: string;

@@ -46,6 +46,16 @@ export const admins = pgTable("admins", {
     createdAt: createdAt(),
 });
 
+// Prod sign-up allowlist. Existing users keep access after removal; block them to cut it.
+export const userAllowlist = pgTable("user_allowlist", {
+    telegramId: text("telegram_id").primaryKey(),
+    note: text("note"),
+    addedBy: uuid("added_by")
+        .notNull()
+        .references(() => admins.id),
+    createdAt: createdAt(),
+});
+
 /* ------------------------------------------------------------------ */
 /* Chains, assets, vaults                                              */
 /* ------------------------------------------------------------------ */

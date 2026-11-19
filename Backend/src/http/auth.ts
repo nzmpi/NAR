@@ -7,6 +7,12 @@ import { admins, users } from "../db/schema.js";
 import { validateInitData } from "../auth/initData.js";
 import { verifyToken } from "../auth/session.js";
 import { AppError } from "../errors.js";
+import { hasAccess } from "../services/allowlist.js";
+
+export const accessEnv = {
+    appEnv: config.APP_ENV,
+    ownerTelegramId: config.OWNER_TELEGRAM_ID,
+};
 
 declare module "fastify" {
     interface FastifyRequest {
@@ -30,13 +36,15 @@ export async function requireUser(req: FastifyRequest) {
     );
     const telegramId = String(tg.id);
 
-    // Test environment: only the owner Telegram account may use it.
-    if (config.APP_ENV === "test" && telegramId !== config.OWNER_TELEGRAM_ID)
-        throw new AppError(
-            "This environment is restricted",
-            403,
-            "test_env_restricted",
-        );
+    // Test environment: owner only. Prod: new sign-ups need the allowlist.
+    if (!(await hasAccess(db, accessEnv, telegramId)))
+        throw config.APP_ENV === "test"
+            ? new AppError(
+                  "This environment is restricted",
+                  403,
+                  "test_env_restricted",
+              )
+            : new AppError("Not invited", 403, "not_allowlisted");
 
     const username = tg.username ?? null;
     await db
