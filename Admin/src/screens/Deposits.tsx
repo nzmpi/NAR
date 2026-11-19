@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../lib/api";
+import { api, useAction } from "../lib/api";
 import { fmtUsd, formatUnits, parseUnits } from "../lib/money";
 import type { AdminDeposit, AdminPools, SweepBatch } from "../lib/types";
 import {
@@ -327,10 +327,11 @@ function SweepPanel({ d, onDone }: { d: AdminDeposit; onDone: () => void }) {
     const [hash, setHash] = useState("");
     const [amt, setAmt] = useState("");
     const parsed = amt ? parseUnits(amt, d.decimals) : undefined;
-    const go = useMutation({
-        mutationFn: () =>
+    const go = useAction({
+        mutationFn: (_, key) =>
             api(`/admin/deposits/${d.intent.id}/sweep`, {
                 method: "POST",
+                key,
                 body: {
                     sweepTxHash: hash.trim(),
                     ...(parsed ? { confirmedAmount: parsed.toString() } : {}),
@@ -386,10 +387,11 @@ function ActivatePanel({
         nav ? formatUnits(nav, 6, 2).replaceAll(",", "") : "",
     );
     const t6 = parseUnits(total, 6);
-    const go = useMutation({
-        mutationFn: () =>
+    const go = useAction({
+        mutationFn: (_, key) =>
             api(`/admin/deposits/${d.intent.id}/activate`, {
                 method: "POST",
+                key,
                 body: { reportedTotalUsd: t6!.toString() },
             }),
         onSuccess: onDone,
@@ -423,10 +425,11 @@ function ActivatePanel({
 
 function RejectPanel({ d, onDone }: { d: AdminDeposit; onDone: () => void }) {
     const [reason, setReason] = useState("");
-    const go = useMutation({
-        mutationFn: () =>
+    const go = useAction({
+        mutationFn: (_, key) =>
             api(`/admin/deposits/${d.intent.id}/reject`, {
                 method: "POST",
+                key,
                 body: { reason: reason.trim() },
             }),
         onSuccess: onDone,
