@@ -136,6 +136,7 @@ await rejects(
         adminId: admin.id,
         txHash: "0x12",
         reportedTotalUsd: 12_400n * U,
+        confirmLargeMove: true,
         now: day(30),
     }),
     "bad tx hash rejected",
@@ -145,6 +146,7 @@ const paid = await markWithdrawalPaid(db, {
     adminId: admin.id,
     txHash: h.hash(),
     reportedTotalUsd: 12_400n * U,
+    confirmLargeMove: true,
     now: day(30),
 });
 ok((await status(w2.withdrawalId)) === "paid", "paid");
@@ -161,6 +163,7 @@ await rejects(
         adminId: admin.id,
         txHash: h.hash(),
         reportedTotalUsd: 12_400n * U,
+        confirmLargeMove: true,
         now: day(31),
     }),
     "cannot pay twice",
@@ -174,6 +177,7 @@ const wb2 = await requestWithdrawal(db, {
 await settleManual(db, {
     adminId: admin.id,
     reportedTotalUsd: (await h.totalNav()) + 50n * U,
+    confirmLargeMove: true,
     now: day(45),
 });
 ok(

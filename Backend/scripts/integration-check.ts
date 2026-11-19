@@ -137,6 +137,7 @@ async function fullDeposit(
                 intentId: intent.id,
                 adminId: admin.id,
                 reportedTotalUsd: total,
+                confirmLargeMove: true,
                 now,
             }),
     };
@@ -234,6 +235,16 @@ const bt = await recordTransfer(db, {
     amount: 90n * 10n ** 18n,
 });
 await autoMatchTransfer(db, bt.id, day(10));
+await rejects(
+    recordSweep(db, {
+        intentId: bobIntent.id,
+        adminId: admin.id,
+        sweepTxHash: hash(),
+        sweptAmount: 89n * 10n ** 18n,
+        now: day(10),
+    }),
+    "confirmed amount above what the sweep moved rejected",
+);
 const sw = await recordSweep(db, {
     intentId: bobIntent.id,
     adminId: admin.id,
@@ -249,6 +260,7 @@ await rejects(
         intentId: bobIntent.id,
         adminId: admin.id,
         reportedTotalUsd: 11_000n * U,
+        confirmLargeMove: true,
         now: day(10),
     }),
     "cannot activate before user approval",
@@ -263,6 +275,7 @@ await activateDeposit(db, {
     intentId: bobIntent.id,
     adminId: admin.id,
     reportedTotalUsd: 11_050n * U,
+    confirmLargeMove: true,
     now: day(10),
 });
 
@@ -274,6 +287,7 @@ const [bobLot] = await db
 const r = await settleManual(db, {
     adminId: admin.id,
     reportedTotalUsd: 12_500n * U,
+    confirmLargeMove: true,
     now: day(365),
     bonuses: [{ lotId: bobLot.id, amountUsd: 20n * U }],
 });
@@ -317,9 +331,24 @@ await rejects(
     settleManual(db, {
         adminId: admin.id,
         reportedTotalUsd: 12_500n * U,
+        confirmLargeMove: true,
         now: day(100),
     }),
     "backdated settlement rejected",
 );
+await rejects(
+    settleManual(db, {
+        adminId: admin.id,
+        reportedTotalUsd: 1_250n * U,
+        now: day(366),
+    }),
+    ">10% NAV move rejected without confirmation",
+);
+await settleManual(db, {
+    adminId: admin.id,
+    reportedTotalUsd: 12_600n * U,
+    now: day(366),
+});
+ok(true, "<10% NAV move needs no confirmation");
 console.log("integration ok");
 process.exit(0);

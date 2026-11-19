@@ -36,8 +36,14 @@ export interface SettleOptions {
     bonuses?: { lotId: string; amountUsd: bigint }[];
     note?: string;
     kind?: "manual" | "pre_action";
+    // Required when the reported total moves NAV by more than LARGE_MOVE_BPS.
+    confirmLargeMove?: boolean;
     now?: Date; // server time; injectable for tests only
 }
+
+// A typo in the reported total cannot be undone: a too-low total takes a loss
+// from user pools, and the recovery above fixed APY goes to the manager pool.
+export const LARGE_MOVE_BPS = 1_000n; // 10%, same as the dashboard warning
 
 export interface SettleOutcome {
     settlementId: string;
@@ -79,6 +85,19 @@ export async function settleInTx(
     }
     if (now.getTime() < intervalStart.getTime())
         throw new AppError("Settlement cannot be backdated", 409, "backdated");
+
+    const prevTotal = totalAssets(before);
+    const move = o.reportedTotalUsd - prevTotal;
+    if (
+        !o.confirmLargeMove &&
+        prevTotal > 0n &&
+        (move < 0n ? -move : move) * 10_000n > prevTotal * LARGE_MOVE_BPS
+    )
+        throw new AppError(
+            "The reported total changes managed funds by more than 10%. Check it, then run a manual settlement with the large-change confirmation first.",
+            409,
+            "large_move",
+        );
 
     // Lots that have matured but are still in lock pools. Lots with a pending
     // withdrawal reservation stay put until it is resolved; they are treated

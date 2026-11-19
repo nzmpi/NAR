@@ -401,12 +401,14 @@ export async function reverifyIntentTransfers(
     }
 }
 
-// The operator's sweep tx must exist and have succeeded.
+// The operator's sweep tx must have succeeded and moved the intent's token out
+// of the intent's vault. Returns the swept amount (token units), or null when
+// the check was skipped (test environment without RPC).
 export async function verifySweepTx(
     database: Database,
     intentId: string,
     txHash: string,
-) {
+): Promise<bigint | null> {
     const r = await loadIntentChain(database, intentId);
     if (!hasRpc(r.chainId)) {
         if (config.APP_ENV === "prod")
@@ -415,19 +417,33 @@ export async function verifySweepTx(
                 503,
                 "no_rpc",
             );
-        return;
+        return null;
     }
-    const receipt = await getReceiptOrNull(r.chainId, txHash);
-    if (!receipt)
+    const tx = await getTransfersInTx(r.chainId, txHash);
+    if (!tx.found)
         throw new AppError(
             "Sweep transaction not found onchain",
             404,
             "tx_not_found",
         );
-    if (receipt.status !== "success")
+    if (!tx.success)
         throw new AppError(
             "Sweep transaction failed onchain",
             400,
             "tx_failed",
         );
+    const swept = tx.transfers
+        .filter(
+            (t) =>
+                t.token.toLowerCase() === r.intent.tokenAddress.toLowerCase() &&
+                t.from.toLowerCase() === r.vaultAddress.toLowerCase(),
+        )
+        .reduce((s, t) => s + t.amount, 0n);
+    if (swept === 0n)
+        throw new AppError(
+            "That transaction does not move this deposit's token out of its vault",
+            400,
+            "not_a_sweep",
+        );
+    return swept;
 }

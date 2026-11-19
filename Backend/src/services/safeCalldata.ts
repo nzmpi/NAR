@@ -15,6 +15,7 @@ import {
     vaultSalt,
 } from "../chain/vaultAddress.js";
 import { AppError } from "../errors.js";
+import { config } from "../config.js";
 import type { Database } from "./types.js";
 
 export interface SafeTx {
@@ -134,6 +135,15 @@ export async function buildSweepBatch(
             "Destination address is not allowed",
             400,
             "bad_address",
+        );
+    if (
+        (config.TREASURY_LIST.length || config.APP_ENV === "prod") &&
+        !config.TREASURY_LIST.includes(lower)
+    )
+        throw new AppError(
+            "Destination is not a configured treasury address (TREASURY_ADDRESSES)",
+            400,
+            "not_treasury",
         );
 
     const tokens: Address[] = [];
