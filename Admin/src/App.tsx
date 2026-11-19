@@ -5,11 +5,23 @@ import { Button, Hint } from "./components/ui";
 import { Overview } from "./screens/Overview";
 import { Settlement } from "./screens/Settlement";
 import { Withdrawals } from "./screens/Withdrawals";
+import { Settlements } from "./screens/Settlements";
+import { Audit } from "./screens/Audit";
+import { Deposits } from "./screens/Deposits";
+import { Transfers } from "./screens/Transfers";
+import { Users } from "./screens/Users";
+import { Setup } from "./screens/Setup";
 
 const TABS = [
     { id: "overview", label: "Overview" },
+    { id: "users", label: "Users" },
+    { id: "setup", label: "Setup" },
+    { id: "deposits", label: "Deposits" },
+    { id: "transfers", label: "Transfers" },
     { id: "withdrawals", label: "Withdrawals" },
     { id: "settlement", label: "Settlement" },
+    { id: "settlements", label: "History" },
+    { id: "audit", label: "Audit" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
 
@@ -73,8 +85,14 @@ export default function App() {
                 </Button>
             </header>
             {tab === "overview" && <Overview />}
+            {tab === "users" && <Users />}
+            {tab === "setup" && <Setup />}
+            {tab === "deposits" && <Deposits />}
+            {tab === "transfers" && <Transfers />}
             {tab === "withdrawals" && <Withdrawals />}
             {tab === "settlement" && <Settlement />}
+            {tab === "settlements" && <Settlements />}
+            {tab === "audit" && <Audit />}
         </div>
     );
 }

@@ -7,7 +7,7 @@ import {
     auditLogs,
     chains,
     depositIntents,
-    vaults,
+    users,
     withdrawals,
 } from "../../db/schema.js";
 import { requireAdmin } from "../auth.js";
@@ -30,11 +30,14 @@ import {
 } from "../../services/withdrawals.js";
 import { fmtUsd, notifyUser } from "../../services/notify.js";
 import {
+    adminListAudit,
     adminListDeposits,
+    adminListSettlements,
     adminListTransfers,
     adminListUsers,
     adminListWithdrawals,
     adminPools,
+    getPortfolio,
 } from "../../services/queries.js";
 import { AppError } from "../../errors.js";
 import { adminPerformance } from "../../services/history.js";
@@ -362,4 +365,65 @@ export async function adminRoutes(app: FastifyInstance) {
             .parse(req.body);
         return buildSweepBatch(db, { vaultId: id, ...b });
     });
+
+    app.get("/admin/assets", auth, async () =>
+        db
+            .select({
+                id: assets.id,
+                symbol: assets.symbol,
+                name: assets.name,
+                tokenAddress: assets.tokenAddress,
+                decimals: assets.decimals,
+                isActive: assets.isActive,
+                chainUuid: chains.id,
+                chainName: chains.name,
+                chainId: chains.chainId,
+            })
+            .from(assets)
+            .innerJoin(chains, eq(chains.id, assets.chainId)),
+    );
+
+    app.get("/admin/users/:id/portfolio", auth, async (req) => {
+        const { id } = idParam.parse(req.params);
+        return getPortfolio(db, id);
+    });
+
+    app.post("/admin/users/:id/blocked", auth, async (req, reply) => {
+        const { id } = idParam.parse(req.params);
+        const b = z.object({ isBlocked: z.boolean() }).parse(req.body);
+        const r = await db
+            .update(users)
+            .set({ isBlocked: b.isBlocked, updatedAt: new Date() })
+            .where(eq(users.id, id))
+            .returning({ id: users.id });
+        if (!r.length) throw new AppError("User not found", 404, "not_found");
+        await audit(
+            req.admin!.id,
+            b.isBlocked ? "user.blocked" : "user.unblocked",
+            "user",
+            id,
+            b,
+        );
+        return reply.code(204).send();
+    });
+
+    app.get("/admin/chains", auth, async () =>
+        db
+            .select({
+                id: chains.id,
+                name: chains.name,
+                chainId: chains.chainId,
+                isActive: chains.isActive,
+            })
+            .from(chains),
+    );
+
+    app.get("/admin/settlements", auth, async (req) => {
+        const q = z
+            .object({ all: z.enum(["true", "false"]).optional() })
+            .parse(req.query);
+        return adminListSettlements(db, q.all !== "true");
+    });
+
+    app.get("/admin/audit", auth, async () => adminListAudit(db));
 }

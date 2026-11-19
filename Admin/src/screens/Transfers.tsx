@@ -1,0 +1,210 @@
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api } from "../lib/api";
+import { formatUnits } from "../lib/money";
+import type { AdminChain, AdminDeposit, AdminTransfer } from "../lib/types";
+import { Button, Card, ErrorText, Hint, Input, Mono } from "../components/ui";
+
+const OPEN = ["intent", "transfer_detected"];
+
+export function Transfers() {
+    const qc = useQueryClient();
+    const transfers = useQuery({
+        queryKey: ["admin-transfers"],
+        queryFn: () => api<AdminTransfer[]>("/admin/transfers?unmatched=true"),
+        refetchInterval: 30_000,
+    });
+    const deposits = useQuery({
+        queryKey: ["admin-deposits"],
+        queryFn: () => api<AdminDeposit[]>("/admin/deposits"),
+    });
+    const chains = useQuery({
+        queryKey: ["admin-chains"],
+        queryFn: () => api<AdminChain[]>("/admin/chains"),
+    });
+
+    const refresh = () => {
+        for (const k of ["admin-transfers", "admin-deposits"])
+            qc.invalidateQueries({ queryKey: [k] });
+    };
+    const deps = deposits.data ?? [];
+
+    return (
+        <div className="space-y-4">
+            <div>
+                <h2 className="font-medium">Unmatched transfers</h2>
+                <Hint>
+                    Incoming transfers to user vaults that could not be matched
+                    to a single open deposit intent.
+                </Hint>
+            </div>
+            {transfers.isLoading && <Hint>Loading…</Hint>}
+            <ErrorText error={transfers.error} />
+            {transfers.data?.length === 0 && (
+                <Hint>All transfers are matched.</Hint>
+            )}
+            <div className="space-y-3">
+                {transfers.data?.map((t) => (
+                    <TransferRow
+                        key={t.id}
+                        t={t}
+                        deps={deps}
+                        onDone={refresh}
+                    />
+                ))}
+            </div>
+            <Ingest chains={chains.data ?? []} onDone={refresh} />
+        </div>
+    );
+}
+
+function TransferRow({
+    t,
+    deps,
+    onDone,
+}: {
+    t: AdminTransfer;
+    deps: AdminDeposit[];
+    onDone: () => void;
+}) {
+    const asset = deps.find((d) => d.intent.assetId === t.assetId);
+    const candidates = deps.filter(
+        (d) => d.intent.vaultId === t.vaultId && OPEN.includes(d.intent.status),
+    );
+    const [pick, setPick] = useState("");
+    const match = useMutation({
+        mutationFn: () =>
+            api(`/admin/transfers/${t.id}/match`, {
+                method: "POST",
+                body: { intentId: pick },
+            }),
+        onSuccess: onDone,
+    });
+    return (
+        <Card className="space-y-2">
+            <div className="flex justify-between text-sm">
+                <b className="tnum">
+                    {asset
+                        ? `${formatUnits(t.amount, asset.decimals, 2)} ${asset.symbol}`
+                        : `${t.amount} (raw)`}
+                </b>
+                <span className="text-[var(--hint)]">
+                    {new Date(t.createdAt).toLocaleString()}
+                </span>
+            </div>
+            <div className="text-sm">
+                <span className="text-[var(--hint)]">Tx: </span>
+                <Mono>{t.txHash}</Mono>
+            </div>
+            {t.fromAddress && (
+                <div className="text-sm">
+                    <span className="text-[var(--hint)]">From: </span>
+                    <Mono>{t.fromAddress}</Mono>
+                </div>
+            )}
+            {candidates.length === 0 ? (
+                <Hint>
+                    No open intent for this vault. Check the user's deposits or
+                    reach out to them.
+                </Hint>
+            ) : (
+                <div className="flex gap-2">
+                    <select
+                        value={pick}
+                        onChange={(e) => setPick(e.target.value)}
+                        className="flex-1 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-sm"
+                    >
+                        <option value="">Match to intent…</option>
+                        {candidates.map((c) => (
+                            <option key={c.intent.id} value={c.intent.id}>
+                                {c.username ? `@${c.username}` : c.telegramId} ·{" "}
+                                {formatUnits(
+                                    c.intent.intendedAmount,
+                                    c.decimals,
+                                    2,
+                                )}{" "}
+                                {c.symbol}
+                            </option>
+                        ))}
+                    </select>
+                    <Button
+                        disabled={!pick || match.isPending}
+                        onClick={() => match.mutate()}
+                    >
+                        Match
+                    </Button>
+                </div>
+            )}
+            <ErrorText error={match.error} />
+        </Card>
+    );
+}
+
+function Ingest({
+    chains,
+    onDone,
+}: {
+    chains: AdminChain[];
+    onDone: () => void;
+}) {
+    const [chainId, setChainId] = useState("");
+    const [hash, setHash] = useState("");
+    const go = useMutation({
+        mutationFn: () =>
+            api<{ transfers: unknown[] }>("/admin/transfers", {
+                method: "POST",
+                body: {
+                    chainId: chainId || chains[0]?.id,
+                    txHash: hash.trim(),
+                },
+            }),
+        onSuccess: () => {
+            setHash("");
+            onDone();
+        },
+    });
+    return (
+        <Card className="space-y-2">
+            <h3 className="font-medium">Add a transfer by transaction hash</h3>
+            <Hint>
+                Use it when the scanner missed a transfer. The server verifies
+                it onchain before recording it.
+            </Hint>
+            <div className="flex flex-wrap gap-2">
+                <select
+                    value={chainId || chains[0]?.id || ""}
+                    onChange={(e) => setChainId(e.target.value)}
+                    className="rounded-lg border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-sm"
+                >
+                    {chains.map((c) => (
+                        <option key={c.id} value={c.id}>
+                            {c.name}
+                        </option>
+                    ))}
+                </select>
+                <Input
+                    placeholder="0x…"
+                    value={hash}
+                    onChange={(e) => setHash(e.target.value)}
+                    className="min-w-0 flex-1 font-mono"
+                />
+                <Button
+                    disabled={
+                        !/^0x[a-fA-F0-9]{64}$/.test(hash.trim()) ||
+                        chains.length === 0 ||
+                        go.isPending
+                    }
+                    onClick={() => go.mutate()}
+                >
+                    Add
+                </Button>
+            </div>
+            {go.data && (
+                <p className="text-sm text-[var(--good)]">
+                    Recorded {go.data.transfers.length} transfer(s).
+                </p>
+            )}
+            <ErrorText error={go.error} />
+        </Card>
+    );
+}
