@@ -2,7 +2,7 @@
   "project": {
     "name": "NAR Telegram trading pool",
     "purpose": "A Telegram Mini App and bot for a private group to deposit stablecoins into deterministic per-user vaults, receive pooled manual trading returns, and request manual withdrawals.",
-    "status": "initial backend prototype implemented; product workflow remains in design and alignment work.",
+    "status": "Backend, Telegram Mini App and admin dashboard implemented and merged to main (2026-11-19). Backend security review done and its medium findings fixed. Deployment setup is next.",
     "maintenance": "Update this file only when the user explicitly asks for an update."
   },
   "scope": {
@@ -19,7 +19,7 @@
     ],
     "valuation": "All supported stablecoins are accounted as 1 USD for now. A depeg is handled manually during withdrawal.",
     "minimum_deposit_usd": 50,
-    "minimum_withdrawal_usd": 50
+    "minimum_withdrawal_usd": 5
   },
   "identity_and_vaults": {
     "telegram_identity": "The backend validates Telegram Mini App initData and maps Telegram's stable numeric user ID to an internal user ID. Do not use initDataUnsafe as a trusted identity source.",
@@ -35,7 +35,7 @@
     "control": {
       "factory_owner": "Separate multisig; deploys vaults and manually sweeps vault tokens.",
       "proxy_admin": "A different multisig; controls Factory upgrades.",
-      "treasury": "No onchain configured treasury. The factory owner supplies the destination for each manual sweep."
+      "treasury": "No onchain configured treasury. The factory owner supplies the destination for each manual sweep; the backend only builds sweep calldata to addresses in the TREASURY_ADDRESSES allowlist (required in prod)."
     },
     "vault_behavior": "Vaults accept direct ERC-20 transfers. Only the Factory can transfer ERC-20 or native balances out.",
     "known_contract_decisions": [
@@ -119,7 +119,8 @@
       "After settlement, the sum of the five pool NAVs equals the reported total NAV.",
       "Pool share prices change with settlement; deposits, withdrawals, relocks, maturity transfers, and position bonuses mint or burn shares at the applicable current price.",
       "All USD values and shares use fixed-point integers; never floating-point arithmetic."
-    ]
+    ],
+    "large_move_guard": "A settlement whose reported total moves managed funds by more than 10% is rejected unless the operator explicitly confirms it on a manual settlement (confirmLargeMove). Deposit activation and withdrawal payout never override it. Reason: a too-low total cannot be undone, because the later recovery above fixed APY goes to the manager pool."
   },
   "withdrawals": {
     "processing": "Users submit requests in the Mini App; the operator manually swaps, bridges, and sends the requested stablecoin on the requested supported chain.",
@@ -186,35 +187,42 @@
   },
   "backend_initial_implementation": {
     "location": "Backend/",
-    "stack": "Fastify, TypeScript, Drizzle ORM, PostgreSQL, Zod, and pg.",
+    "stack": "Fastify, TypeScript, Drizzle ORM, PostgreSQL, Zod, viem, grammY, jose.",
     "implemented": [
-      "Health and database-health endpoints.",
-      "A development-only admin deposit-confirmation endpoint at POST /admin/deposits/confirm.",
-      "Core users, admins, chains, assets, vaults, pooled state, positions, deposits, withdrawals, ledger, idempotency, and audit-log tables.",
-      "Transactional deposit confirmation that mints pooled shares, writes balanced USD ledger entries, updates a user position and pooled state, and writes an audit record.",
-      "Input validation for IDs, whole-unit token amounts, transaction hashes, transfer indexes, active user/vault/asset relationships, and USDT/USDC/DAI symbols."
+      "Mini App auth via Telegram initData (Authorization: tma ...); admin auth via Telegram Login OIDC with PKCE and an httpOnly session cookie plus Origin/X-Requested-With CSRF checks.",
+      "Deterministic counterfactual vaults per user and nonce, Safe batch calldata for Factory deploys and sweeps.",
+      "Deposit intents with 24-hour expiry, chain scanner and tx-hash fallback, auto/manual matching, reorg re-verification, sweep recording, amount-change approval and activation.",
+      "Five-pool NAV/share accounting with lock lots, manual total-NAV settlement, tier caps, manager excess, bonuses, maturity conversion and queued relocks.",
+      "Withdrawals with quote, share reservation, early fee, cancel, reject and paid flows.",
+      "Balanced USD ledger, audit log, idempotency keys, per-IP and per-user rate limits, notification outbox, performance history."
     ],
-    "verification": "npm run build completed successfully on 2026-10-19.",
-    "current_model": "One USD-denominated pooled NAV/share prototype. It must be replaced with five pool states and per-lot position shares: liquid, 1-month, 2-month, 3-month, and manager.",
-    "required_alignment": [
-      "Replace development-only environment-variable admin identity with Telegram Mini App and Telegram Login authentication.",
-      "Add deposit intents, 24-hour expiry, pending/manual matching, amount-change approval, vault deployment, sweep, and confirmation states.",
-      "Verify onchain ERC-20 transfers before crediting deposits; the current endpoint trusts submitted amount and transaction metadata.",
-      "Replace the singleton position/pool model with lock lots, five pool states, manual total-NAV settlement, time-weighted tier caps, manager excess, one-time position bonuses, maturity, relock, withdrawal reservation, early fee, and payout workflows.",
-      "Repair the migration sequence before applying it to a fresh database: 0005 references ledger columns already removed by 0004, and 0006_single_pool_state is not listed in the Drizzle journal.",
-      "Delete or relocate the untracked PostgreSQL schema-dump artifact at Backend/src/services/Table public.ledger_entries before committing."
-    ]
+    "verification": "tsc and npm test (units, accounting, integration, withdrawals, relocks, history) pass on 2026-11-19.",
+    "security_review_2026_11_19": {
+      "fixed": [
+        "Sweep verification now requires the sweep transaction to move the intent's token out of the intent's vault, and the amounts recorded against one sweep hash cannot exceed what it moved.",
+        "Settlement large-move guard (see multi_pool_accounting.large_move_guard).",
+        "Sweep calldata destinations restricted to TREASURY_ADDRESSES."
+      ],
+      "not_verified": "The onchain sweep check in verifySweepTx has not been exercised against a real RPC; test once on a testnet sweep.",
+      "open_low_findings": [
+        "Withdrawal payouts are not verified onchain, and one payout tx hash can mark several withdrawals paid.",
+        "In prod any Telegram user can sign up; consider a Telegram-ID allowlist for the family-and-friends launch.",
+        "Admin state-changing actions have no idempotency keys (double-click on settle records two settlements).",
+        "Logout clears the cookie but the 8-hour session JWT stays valid until expiry; deactivating the admin does revoke access."
+      ]
+    }
   },
   "technology": {
-    "frontend": "TypeScript and Next.js Telegram Mini App.",
+    "frontend": "TypeScript, React, Vite, Tailwind and TanStack Query for both the Telegram Mini App (Miniapp/) and the admin dashboard (Admin/).",
     "backend": "TypeScript and Node.js API service.",
     "database": "PostgreSQL.",
     "rpc": "Environment-configured endpoints, to be supplied later.",
-    "test_environment": "Use the same bot and codebase with a server-enforced admin-only test environment. It has separate test-chain configuration and database; only the owner Telegram account can use it."
+    "test_environment": "Use the same bot and codebase with a server-enforced admin-only test environment. It has separate test-chain configuration and database; only the owner Telegram account can use it.",
+    "bot": "grammY; polling in development, webhook in production."
   },
   "open_decisions": [
-    "Choose the Telegram bot library and hosting platform.",
-    "Implement the drafted multi-pool database migration and API contracts.",
+    "Choose the hosting platform and write the deployment setup (Dockerfile, migration order, env checklist incl. TREASURY_ADDRESSES, reverse proxy for the same-site admin cookie).",
+    "Decide which open low security findings to fix before launch.",
     "Design the explicit contract-hardening changes when the user requests them.",
     "Add donation or vault-sharing features only in a later scope."
   ]
