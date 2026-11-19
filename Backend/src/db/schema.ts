@@ -43,6 +43,10 @@ export const admins = pgTable("admins", {
     telegramId: text("telegram_id").notNull().unique(),
     role: text("role").notNull().default("admin"),
     isActive: boolean("is_active").notNull().default(true),
+    // Admin session tokens issued at or before this time are rejected (logout).
+    sessionsValidAfter: timestamp("sessions_valid_after", {
+        withTimezone: true,
+    }),
     createdAt: createdAt(),
 });
 

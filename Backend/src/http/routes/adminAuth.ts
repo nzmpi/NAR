@@ -100,7 +100,12 @@ export async function adminAuthRoutes(app: FastifyInstance) {
     app.post(
         "/admin/auth/logout",
         { preHandler: requireAdmin },
-        async (_req, reply) => {
+        async (req, reply) => {
+            // Revoke every session of this admin, not only this cookie.
+            await db
+                .update(admins)
+                .set({ sessionsValidAfter: new Date() })
+                .where(eq(admins.id, req.admin!.id));
             reply.clearCookie(ADMIN_COOKIE, { path: "/" });
             return reply.code(204).send();
         },

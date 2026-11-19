@@ -27,7 +27,7 @@ Mark a step done by changing `[ ]` to `[x]`.
 
 - [x] **User allowlist** — in prod only allowlisted Telegram IDs can sign up. Admin can add and remove IDs. Applies to the Mini App and the bot.
 - [x] **Admin idempotency** — a double-click on settle must not record two settlements. Add idempotency keys to admin state-changing actions.
-- [ ] **Session revocation** — logout must invalidate the admin session at once, not after 8 hours.
+- [x] **Session revocation** — logout must invalidate the admin session at once, not after 8 hours.
 
 ## 3. Oracle server setup (backend)
 
