@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../lib/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { api, useAction } from "../lib/api";
 import { fmtUsd, parseUnits } from "../lib/money";
 import type {
     AdminPools,
@@ -30,10 +30,11 @@ export function Settlement() {
     const [confirm, setConfirm] = useState(false);
     const [bonuses, setBonuses] = useState<Bonus[]>([]);
 
-    const run = useMutation({
-        mutationFn: (reportedTotalUsd: string) =>
+    const run = useAction({
+        mutationFn: (reportedTotalUsd: string, key) =>
             api<SettlementResult>("/admin/settlements", {
                 method: "POST",
+                key,
                 body: {
                     reportedTotalUsd,
                     confirmLargeMove: checked || undefined,

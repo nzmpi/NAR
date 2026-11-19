@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../lib/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { api, useAction } from "../lib/api";
 import { fmtUsd, formatUnits, parseUnits } from "../lib/money";
 import type { AdminPools, AdminWithdrawal } from "../lib/types";
 import {
@@ -75,10 +75,11 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
             qc.invalidateQueries({ queryKey: [k] });
     };
     const total6 = parseUnits(total, 6);
-    const pay = useMutation({
-        mutationFn: () =>
+    const pay = useAction({
+        mutationFn: (_, key) =>
             api("/admin/withdrawals/" + w.id + "/paid", {
                 method: "POST",
+                key,
                 body: {
                     txHash: hash.trim(),
                     reportedTotalUsd: total6!.toString(),
@@ -86,10 +87,11 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
             }),
         onSuccess: done,
     });
-    const reject = useMutation({
-        mutationFn: () =>
+    const reject = useAction({
+        mutationFn: (_, key) =>
             api("/admin/withdrawals/" + w.id + "/reject", {
                 method: "POST",
+                key,
                 body: { reason: reason.trim() },
             }),
         onSuccess: done,
