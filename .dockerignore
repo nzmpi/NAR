@@ -1,0 +1,11 @@
+**/.env
+**/node_modules
+.git
+Admin
+Miniapp
+Backend/dist
+Foundry/out
+Foundry/cache
+Foundry/broadcast
+Foundry/coverage
+Foundry/lcov.info
