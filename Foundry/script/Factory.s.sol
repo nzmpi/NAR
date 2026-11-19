@@ -10,7 +10,7 @@ contract FactoryScript is Script {
 
     function run() public {
         vm.startBroadcast();
-        address admin = ...;
+        address admin = 0xdEAD000000000000000042069420694206942069;
         bytes32 factorySalt = keccak256("factory salt to deploy");
         Factory impl = new Factory{salt: factorySalt}();
         console.log(address(impl));
