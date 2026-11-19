@@ -1,6 +1,8 @@
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import {
+    admins,
     assets,
+    auditLogs,
     chains,
     depositIntentAllocations,
     depositIntents,
@@ -11,6 +13,8 @@ import {
     positionLots,
     relockItems,
     relockRequests,
+    settlementAllocations,
+    settlements,
     users,
     vaults,
     withdrawalAllocations,
@@ -312,4 +316,63 @@ export function adminListUsers(database: Database) {
         .from(users)
         .orderBy(desc(users.createdAt))
         .limit(LIMIT);
+}
+
+export async function adminListSettlements(
+    database: Database,
+    manualOnly: boolean,
+) {
+    const rows = await database
+        .select({ s: settlements, adminTelegramId: admins.telegramId })
+        .from(settlements)
+        .leftJoin(admins, eq(admins.id, settlements.adminId))
+        .where(manualOnly ? eq(settlements.kind, "manual") : undefined)
+        .orderBy(desc(settlements.settledAt))
+        .limit(100);
+    if (!rows.length) return [];
+    const allocs = await database
+        .select({
+            settlementId: settlementAllocations.settlementId,
+            pool: pools.key,
+            kind: settlementAllocations.kind,
+            amountUsd: settlementAllocations.amountUsd,
+            navAfterUsd: settlementAllocations.navAfterUsd,
+        })
+        .from(settlementAllocations)
+        .innerJoin(pools, eq(pools.id, settlementAllocations.poolId))
+        .where(
+            inArray(
+                settlementAllocations.settlementId,
+                rows.map((r) => r.s.id),
+            ),
+        );
+    return rows.map((r) => ({
+        ...r.s,
+        adminTelegramId: r.adminTelegramId,
+        allocations: allocs
+            .filter((a) => a.settlementId === r.s.id)
+            .map((a) => ({
+                pool: a.pool,
+                kind: a.kind,
+                amountUsd: a.amountUsd,
+                navAfterUsd: a.navAfterUsd,
+            })),
+    }));
+}
+
+export function adminListAudit(database: Database) {
+    return database
+        .select({
+            id: auditLogs.id,
+            action: auditLogs.action,
+            entityType: auditLogs.entityType,
+            entityId: auditLogs.entityId,
+            details: auditLogs.details,
+            createdAt: auditLogs.createdAt,
+            adminTelegramId: admins.telegramId,
+        })
+        .from(auditLogs)
+        .innerJoin(admins, eq(admins.id, auditLogs.adminId))
+        .orderBy(desc(auditLogs.createdAt))
+        .limit(200);
 }
