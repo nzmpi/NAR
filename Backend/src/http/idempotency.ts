@@ -23,7 +23,8 @@ export async function idempotent(
             "idempotency_key",
         );
 
-    const scope = `${actorId}:${req.method}:${req.routeOptions.url}`;
+    // Concrete path, not the route pattern: /x/:id calls for different ids never share a key.
+    const scope = `${actorId}:${req.method}:${req.url.split("?")[0]}`;
     const requestHash = createHash("sha256")
         .update(JSON.stringify(req.body ?? null))
         .digest("hex");

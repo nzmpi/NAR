@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../lib/api";
+import { api, useAction } from "../lib/api";
 import { downloadJson } from "../lib/download";
 import { bpsPct, fmtUsd, formatUnits } from "../lib/money";
 import type {
@@ -78,10 +78,11 @@ function Allowlist() {
         queryFn: () => api<AllowlistEntry[]>("/admin/allowlist"),
     });
     const done = () => qc.invalidateQueries({ queryKey: ["admin-allowlist"] });
-    const add = useMutation({
-        mutationFn: () =>
+    const add = useAction({
+        mutationFn: (_, key) =>
             api("/admin/allowlist", {
                 method: "POST",
+                key,
                 body: { telegramId: tg.trim(), note: note.trim() || undefined },
             }),
         onSuccess: () => {
@@ -90,9 +91,9 @@ function Allowlist() {
             done();
         },
     });
-    const remove = useMutation({
-        mutationFn: (id: string) =>
-            api(`/admin/allowlist/${id}/remove`, { method: "POST" }),
+    const remove = useAction({
+        mutationFn: (id: string, key) =>
+            api(`/admin/allowlist/${id}/remove`, { method: "POST", key }),
         onSuccess: done,
     });
 
@@ -170,17 +171,18 @@ function UserDetail({ u }: { u: AdminUser }) {
         queryKey: ["admin-vaults", u.id],
         queryFn: () => api<AdminVault[]>(`/admin/vaults?userId=${u.id}`),
     });
-    const block = useMutation({
-        mutationFn: () =>
+    const block = useAction({
+        mutationFn: (_, key) =>
             api(`/admin/users/${u.id}/blocked`, {
                 method: "POST",
+                key,
                 body: { isBlocked: !u.isBlocked },
             }),
         onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-users"] }),
     });
-    const addVault = useMutation({
-        mutationFn: () =>
-            api(`/admin/users/${u.id}/vaults`, { method: "POST" }),
+    const addVault = useAction({
+        mutationFn: (_, key) =>
+            api(`/admin/users/${u.id}/vaults`, { method: "POST", key }),
         onSuccess: () =>
             qc.invalidateQueries({ queryKey: ["admin-vaults", u.id] }),
     });
@@ -295,10 +297,11 @@ function VaultRow({ v, userId }: { v: AdminVault; userId: string }) {
                 r.safeBatch,
             ),
     });
-    const deployed = useMutation({
-        mutationFn: () =>
+    const deployed = useAction({
+        mutationFn: (_, key) =>
             api(`/admin/vaults/${v.id}/deployed`, {
                 method: "POST",
+                key,
                 body: { deployTxHash: hash.trim() },
             }),
         onSuccess: () => {

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../lib/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { api, useAction } from "../lib/api";
 import { formatUnits } from "../lib/money";
 import type { AdminChain, AdminDeposit, AdminTransfer } from "../lib/types";
 import { Button, Card, ErrorText, Hint, Input, Mono } from "../components/ui";
@@ -72,10 +72,11 @@ function TransferRow({
         (d) => d.intent.vaultId === t.vaultId && OPEN.includes(d.intent.status),
     );
     const [pick, setPick] = useState("");
-    const match = useMutation({
-        mutationFn: () =>
+    const match = useAction({
+        mutationFn: (_, key) =>
             api(`/admin/transfers/${t.id}/match`, {
                 method: "POST",
+                key,
                 body: { intentId: pick },
             }),
         onSuccess: onDone,
@@ -149,10 +150,11 @@ function Ingest({
 }) {
     const [chainId, setChainId] = useState("");
     const [hash, setHash] = useState("");
-    const go = useMutation({
-        mutationFn: () =>
+    const go = useAction({
+        mutationFn: (_, key) =>
             api<{ transfers: unknown[] }>("/admin/transfers", {
                 method: "POST",
+                key,
                 body: {
                     chainId: chainId || chains[0]?.id,
                     txHash: hash.trim(),

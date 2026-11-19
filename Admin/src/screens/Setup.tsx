@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../lib/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { api, useAction } from "../lib/api";
 import type { AdminAsset, AdminChain } from "../lib/types";
 import {
     Badge,
@@ -68,10 +68,11 @@ export function Setup() {
 function AddChain({ onDone }: { onDone: () => void }) {
     const [name, setName] = useState("");
     const [id, setId] = useState("");
-    const go = useMutation({
-        mutationFn: () =>
+    const go = useAction({
+        mutationFn: (_, key) =>
             api("/admin/chains", {
                 method: "POST",
+                key,
                 body: { name: name.trim(), chainId: Number(id) },
             }),
         onSuccess: () => {
@@ -116,10 +117,11 @@ function AddChain({ onDone }: { onDone: () => void }) {
 }
 
 function AssetRow({ a, onDone }: { a: AdminAsset; onDone: () => void }) {
-    const go = useMutation({
-        mutationFn: () =>
+    const go = useAction({
+        mutationFn: (_, key) =>
             api(`/admin/assets/${a.id}/active`, {
                 method: "POST",
+                key,
                 body: { isActive: !a.isActive },
             }),
         onSuccess: onDone,
@@ -161,10 +163,11 @@ function AddAsset({
     const [symbol, setSymbol] = useState<"USDT" | "USDC" | "DAI">("USDC");
     const [addr, setAddr] = useState("");
     const [dec, setDec] = useState("6");
-    const go = useMutation({
-        mutationFn: () =>
+    const go = useAction({
+        mutationFn: (_, key) =>
             api("/admin/assets", {
                 method: "POST",
+                key,
                 body: {
                     chainId: chain || chains[0]?.id,
                     symbol,

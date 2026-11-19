@@ -1,3 +1,5 @@
+import { useRef } from "react";
+import { useMutation } from "@tanstack/react-query";
 const BASE =
     (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ??
     "";
@@ -17,12 +19,13 @@ export const loginUrl = `${BASE}/admin/auth/login`;
 // Session is an httpOnly cookie. State-changing calls need the custom header (CSRF).
 export async function api<T>(
     path: string,
-    opts: { method?: "GET" | "POST"; body?: unknown } = {},
+    opts: { method?: "GET" | "POST"; body?: unknown; key?: string } = {},
 ): Promise<T> {
     const method = opts.method ?? "GET";
     const headers: Record<string, string> = {};
     if (method !== "GET") headers["X-Requested-With"] = "nar-admin";
     if (opts.body !== undefined) headers["Content-Type"] = "application/json";
+    if (opts.key) headers["Idempotency-Key"] = opts.key;
 
     let res: Response;
     try {
@@ -47,4 +50,20 @@ export async function api<T>(
         );
     }
     return data as T;
+}
+
+// useMutation for state-changing admin calls. One Idempotency-Key per action
+// until it succeeds, so a double-click or retry cannot act twice.
+export function useAction<T, V = void>(o: {
+    mutationFn: (v: V, key: string) => Promise<T>;
+    onSuccess?: (r: T, v: V) => unknown;
+}) {
+    const key = useRef(crypto.randomUUID());
+    return useMutation({
+        mutationFn: (v: V) => o.mutationFn(v, key.current),
+        onSuccess: (r, v) => {
+            key.current = crypto.randomUUID();
+            return o.onSuccess?.(r, v);
+        },
+    });
 }
