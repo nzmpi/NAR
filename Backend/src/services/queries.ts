@@ -294,6 +294,7 @@ export function adminListWithdrawals(database: Database, status?: string) {
             telegramId: users.telegramId,
             username: users.username,
             symbol: assets.symbol,
+            decimals: assets.decimals,
             chainId: chains.chainId,
         })
         .from(withdrawals)
