@@ -70,6 +70,7 @@ Mark a step done by changing `[ ]` to `[x]`.
 
 - [x] **Deposit flow** — intent, USDC transfer, scanner match, vault deploy via Safe, sweep, activation, Telegram notification.
 - [x] **Verify `verifySweepTx` on a real RPC** — this check has never run against a real chain.
+- [x] **Scan on demand** — the timed chain scan hit RPC rate limits. Admin **Check vaults** reads vault balances (Multicall3) and scans logs only for funded vaults.
 - [ ] **Accounting flow** — settlement (incl. large-move guard), maturity, relock, bonus.
 - [ ] **Withdrawal flow** — quote with early fee, reserve, cancel, reject, pay, notification.
 - [x] **Admin login** — Telegram Login through the Vercel rewrite; logout revokes the session.

@@ -73,7 +73,7 @@ Neon's free-tier restore window is short, so `backup.sh` keeps our own copies.
 
 ## Monitoring
 
-`GET /health/ready` returns 200 when all is well. It returns 503 when the DB is unreachable, or when the scanner or the notification outbox has had no good run for 5 intervals (at least 10 minutes). The scanner also counts as stalled when any active chain fails, for example a dead RPC. The JSON body says which part failed. Loops turned off (interval `0`) show `off` and do not fail the check.
+`GET /health/ready` returns 200 when all is well. It returns 503 when the DB is unreachable, or when the intent-expiry loop (`scanner`) or the notification outbox has had no good run for 5 intervals (at least 10 minutes). Chains are no longer scanned on a timer: press **Check vaults** on the Admin Deposits screen. It reads every vault's token balance and fetches transfer logs only for vaults that hold tokens. The JSON body says which part failed. Loops turned off (interval `0`) show `off` and do not fail the check.
 
 Set up a free external uptime monitor (for example UptimeRobot):
 

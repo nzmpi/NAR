@@ -12,6 +12,7 @@ import {
     withdrawals,
 } from "../../db/schema.js";
 import { requireAdmin } from "../auth.js";
+import { hasRpc } from "../../chain/client.js";
 import { idempotent } from "../idempotency.js";
 import { big, evmAddress, idParam, txHash, uuid } from "../schemas.js";
 import {
@@ -23,6 +24,7 @@ import {
 import {
     ingestTransactionByHash,
     reverifyIntentTransfers,
+    scanChain,
     verifySweepTx,
 } from "../../services/transferScanner.js";
 import { settleManual } from "../../services/settlement.js";
@@ -132,6 +134,36 @@ export async function adminRoutes(app: FastifyInstance) {
             .parse(req.query);
         return adminListTransfers(db, q.unmatched === "true");
     });
+
+    // Reads every vault's token balances; only funded vaults get a log scan.
+    app.post(
+        "/admin/scan",
+        auth,
+        once(200, async (req) => {
+            const active = await db
+                .select()
+                .from(chains)
+                .where(eq(chains.isActive, true));
+            const out = [];
+            for (const c of active) {
+                if (!hasRpc(c.chainId)) {
+                    out.push({ chain: c.name, error: "no RPC" });
+                    continue;
+                }
+                try {
+                    const r = await scanChain(db, {
+                        id: c.id,
+                        chainId: c.chainId,
+                    });
+                    out.push({ chain: c.name, ...r });
+                } catch (e) {
+                    req.log.error(e);
+                    out.push({ chain: c.name, error: "RPC error" });
+                }
+            }
+            return { chains: out };
+        }),
+    );
 
     app.post(
         "/admin/transfers",
