@@ -40,13 +40,16 @@ Mark a step done by changing `[ ]` to `[x]`.
 - [x] **Migration runbook** — how to run `node dist/migrate.js` on a fresh DB, and the rule for future migrations once a DB holds funds: `pg_dump` first, then migrate, then pull and restart. Deploy by the `:<sha>` image tag, not `:latest`.
 - [ ] **Env and secrets** — a server-only `.env` with every variable from `Backend/.env.example`: `APP_ENV=prod`, `SESSION_SECRET`, `BOT_TOKEN`, `TELEGRAM_CLIENT_SECRET`, `TREASURY_ADDRESSES`, `RPC_URL_84532`, `RPC_URL_421614`, `FACTORY_ADDRESS`, `VAULT_CREATION_CODE_HASH`, `TRUST_PROXY_HOPS=1`. Clear the unused `RPC_URL_137/8453/56`.
 - [ ] **Bot mode** — `BOT_MODE=polling` is simplest on one server; `webhook` also works on the DuckDNS HTTPS URL.
-- [ ] **Backups** — `deploy/backup.sh` does a daily `pg_dump` to Oracle Object Storage. Left on the server: bucket, write-only PAR, cron, and one test restore (`deploy/RUNBOOK.md`).
-- [ ] **Monitoring** — `GET /health/ready` returns 503 when the DB is down or the scanner/outbox stalls. Left: point an external uptime monitor at it (`deploy/RUNBOOK.md`).
+- [x] **Backup script** — `deploy/backup.sh` does a daily `pg_dump` to Oracle Object Storage.
+- [ ] **Backups on the server** — bucket, write-only PAR, cron, and one test restore (`deploy/RUNBOOK.md`).
+- [x] **Health endpoint** — `GET /health/ready` returns 503 when the DB is down or the scanner/outbox stalls.
+- [ ] **Uptime monitor** — point an external uptime monitor at `/health/ready` (`deploy/RUNBOOK.md`).
 
 ## 4. Vercel setup (Admin + Miniapp)
 
 - [ ] **Miniapp project** — build `Miniapp/`, set `VITE_API_URL=https://<name>.duckdns.org`. It authenticates with a header, so cross-site is fine.
-- [ ] **Admin project** — build `Admin/` with `VITE_API_URL` empty. Add Vercel rewrites that forward the backend's admin API paths to `https://<name>.duckdns.org`. The browser then sees the API on the same `*.vercel.app` site, so the `SameSite=Lax` session cookie works without a domain.
+- [x] **Admin rewrites** — `Admin/vercel.json` rewrites `/admin/*` (all API calls and the OIDC callback) to the backend, so the browser sees one site and the `SameSite=Lax` cookie works.
+- [ ] **Admin project** — replace `BACKEND_HOST` in `Admin/vercel.json` with the DuckDNS name, then create the Vercel project with root `Admin/` and `VITE_API_URL` unset.
 - [ ] **Admin callback** — set `ADMIN_ORIGIN` and `ADMIN_CALLBACK_URL` to the Admin Vercel URL, so the OIDC callback also goes through the rewrite.
 - [ ] **CORS** — set `CORS_ORIGINS` on the backend to the Miniapp Vercel URL.
 

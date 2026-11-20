@@ -1,0 +1,9 @@
+{
+    "$schema": "https://openapi.vercel.sh/vercel.json",
+    "rewrites": [
+        {
+            "source": "/admin/:path*",
+            "destination": "https://BACKEND_HOST.duckdns.org/admin/:path*"
+        }
+    ]
+}
