@@ -1,7 +1,8 @@
 # Build from the repo root: docker build -f Backend/Dockerfile .
 # Root context is needed to compile the Vault artifact from Foundry/.
 
-FROM ghcr.io/foundry-rs/foundry:stable AS contracts
+# Pinned: the Vault bytecode (and so every vault address) must not change on rebuild.
+FROM ghcr.io/foundry-rs/foundry:v1.5.1 AS contracts
 USER root
 WORKDIR /contracts
 COPY Foundry/ .
@@ -28,4 +29,6 @@ COPY Backend/drizzle ./drizzle
 COPY --from=contracts /contracts/out/Vault.sol/Vault.json ./Vault.json
 USER node
 EXPOSE 3000
-CMD ["sh", "-c", "node dist/migrate.js && exec node dist/server.js"]
+# Migrations are a separate, deliberate step (back up first):
+#   docker compose run --rm backend node dist/migrate.js
+CMD ["node", "dist/server.js"]

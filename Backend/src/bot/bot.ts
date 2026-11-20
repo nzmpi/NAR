@@ -1,7 +1,9 @@
 import { Bot, InlineKeyboard, webhookCallback } from "grammy";
 import type { FastifyInstance } from "fastify";
 import { config } from "../config.js";
+import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
+import { users } from "../db/schema.js";
 import { hasAccess } from "../services/allowlist.js";
 
 type Log = {
@@ -28,16 +30,27 @@ export function getBot(): Bot {
               }
             : {};
 
-    const restricted = async (id: number | undefined) =>
-        id === undefined ||
-        !(await hasAccess(
-            db,
-            {
-                appEnv: config.APP_ENV,
-                ownerTelegramId: config.OWNER_TELEGRAM_ID,
-            },
-            String(id),
-        ));
+    const restricted = async (id: number | undefined) => {
+        if (id === undefined) return true;
+        const telegramId = String(id);
+        if (
+            !(await hasAccess(
+                db,
+                {
+                    appEnv: config.APP_ENV,
+                    ownerTelegramId: config.OWNER_TELEGRAM_ID,
+                },
+                telegramId,
+            ))
+        )
+            return true;
+        const [u] = await db
+            .select({ isBlocked: users.isBlocked })
+            .from(users)
+            .where(eq(users.telegramId, telegramId))
+            .limit(1);
+        return !!u?.isBlocked;
+    };
 
     priv.command("start", async (ctx) => {
         if (await restricted(ctx.from?.id))

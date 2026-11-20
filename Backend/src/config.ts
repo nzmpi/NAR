@@ -66,6 +66,16 @@ const schema = z.object({
 const env = schema.parse(process.env);
 if (env.BOT_MODE === "webhook" && (!env.WEBHOOK_URL || !env.WEBHOOK_SECRET))
     throw new Error("BOT_MODE=webhook requires WEBHOOK_URL and WEBHOOK_SECRET");
+// Vault addresses depend on these exact values; prod never runs without the pin.
+if (
+    env.APP_ENV === "prod" &&
+    (!env.FACTORY_ADDRESS ||
+        !env.VAULT_ARTIFACT_PATH ||
+        !env.VAULT_CREATION_CODE_HASH)
+)
+    throw new Error(
+        "APP_ENV=prod requires FACTORY_ADDRESS (the proxy), VAULT_ARTIFACT_PATH and VAULT_CREATION_CODE_HASH",
+    );
 const adminOrigin = new URL(env.ADMIN_ORIGIN).origin;
 const rpcUrls: Record<number, string[]> = {};
 for (const [k, v] of Object.entries(process.env)) {

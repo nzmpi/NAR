@@ -73,11 +73,14 @@ export async function requireAdmin(req: FastifyRequest) {
     const token = req.cookies[ADMIN_COOKIE];
     if (!token) throw new AppError("Unauthorized", 401, "unauthorized");
 
-    let adminId: string, iat: number;
+    let adminId: string, issuedMs: number;
     try {
         const payload = await verifyToken(token, "admin-session");
         adminId = String(payload.adm);
-        iat = payload.iat ?? 0;
+        issuedMs =
+            typeof payload.t === "number"
+                ? payload.t
+                : (payload.iat ?? 0) * 1000;
     } catch {
         throw new AppError("Unauthorized", 401, "unauthorized");
     }
@@ -95,10 +98,9 @@ export async function requireAdmin(req: FastifyRequest) {
         .from(admins)
         .where(and(eq(admins.id, adminId), eq(admins.isActive, true)))
         .limit(1);
-    // iat has 1 s resolution: a login in the same second as logout is also rejected.
     if (
         !a ||
-        (a.sessionsValidAfter && iat * 1000 <= a.sessionsValidAfter.getTime())
+        (a.sessionsValidAfter && issuedMs <= a.sessionsValidAfter.getTime())
     )
         throw new AppError("Unauthorized", 401, "unauthorized");
     req.admin = { id: a.id, telegramId: a.telegramId };
