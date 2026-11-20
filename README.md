@@ -47,10 +47,11 @@ npm run dev            # http://localhost:3000, health at /health and /health/db
 
 ### Docker
 
-Build from the repo root. The image compiles the Vault artifact and runs migrations before the server starts.
+Build from the repo root. The image compiles the Vault artifact. It does not run migrations on start: run them as a separate step, after a backup.
 
 ```bash
 docker build -f Backend/Dockerfile -t nar-backend .
+docker run --rm --env-file Backend/.env nar-backend node dist/migrate.js
 docker run --env-file Backend/.env -p 3000:3000 nar-backend
 ```
 
