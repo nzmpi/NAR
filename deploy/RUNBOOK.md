@@ -60,3 +60,15 @@ Neon's free-tier restore window is short, so `backup.sh` keeps our own copies.
 - Drop or rename a column in a later release, after no deployed code uses it.
 - Never edit or delete a migration file that has been applied anywhere. Fix forward with a new one.
 - Rollback: set `TAG` back to the previous sha and `docker compose up -d`. This works only because migrations are additive. Otherwise restore the dump.
+
+## Monitoring
+
+`GET /health/ready` returns 200 when all is well. It returns 503 when the DB is unreachable, or when the scanner or the notification outbox has had no good run for 5 intervals (at least 5 minutes). The scanner also counts as stalled when any active chain fails, for example a dead RPC. The JSON body says which part failed. Loops turned off (interval `0`) show `off` and do not fail the check.
+
+Set up a free external uptime monitor (for example UptimeRobot):
+
+1. HTTP(S) monitor on `https://<DOMAIN>/health/ready`, every 5 minutes.
+2. Alert contact: email, or Telegram if the service supports it.
+3. Stop the backend container once and confirm the alert arrives.
+
+On an alert, check `docker compose logs --tail 200 backend`.
