@@ -2,6 +2,16 @@
 
 All commands run in `deploy/` on the server. `DATABASE_URL` in `.env` is the Neon **direct** (non-pooled) string with `sslmode=require`.
 
+## Server setup (once)
+
+1. Oracle console, the instance's VCN security list: add ingress TCP 80, TCP 443 and UDP 443 from `0.0.0.0/0`. Keep 22.
+2. On the server, run the base setup (updates, 2 GB swap, key-only SSH, host firewall, Docker). It is safe to re-run.
+   ```bash
+   scp deploy/server-setup.sh ubuntu@nzmpi.duckdns.org:
+   ssh ubuntu@nzmpi.duckdns.org 'sudo bash server-setup.sh'
+   ```
+3. Log out and back in, then `docker ps` works without sudo.
+
 ## Fresh database
 
 1. Set `DATABASE_URL` and `TAG` in `.env`.
