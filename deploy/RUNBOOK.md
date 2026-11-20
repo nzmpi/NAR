@@ -45,13 +45,13 @@ The `pg_dump` client must be the same major version as the server or newer. Neon
 
 ```bash
 set -a; . ./.env; set +a
-docker run --rm postgres:17 pg_dump "$DATABASE_URL" -Fc > "nar-$(date +%F-%H%M).dump"
+docker run --rm postgres:18 pg_dump "$DATABASE_URL" -Fc > "nar-$(date +%F-%H%M).dump"
 ```
 
 Restore (overwrites the tables in the target DB):
 
 ```bash
-docker run --rm -i postgres:17 pg_restore --clean --if-exists --no-owner -d "$DATABASE_URL" < nar-YYYY-MM-DD-HHMM.dump
+docker run --rm -i postgres:18 pg_restore --clean --if-exists --no-owner -d "$DATABASE_URL" < nar-YYYY-MM-DD-HHMM.dump
 ```
 
 ### Daily backup

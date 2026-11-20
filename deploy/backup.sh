@@ -12,6 +12,6 @@ set +a
 
 f="nar-$(date -u +%F-%H%M).dump"
 trap 'rm -f "$f"' EXIT
-docker run --rm postgres:17 pg_dump "$DATABASE_URL" -Fc > "$f"
+docker run --rm postgres:18 pg_dump "$DATABASE_URL" -Fc > "$f"
 curl -fsS --retry 3 -T "$f" "$BACKUP_PAR_URL$f"
 echo "$(date -u +%FT%TZ) uploaded $f ($(wc -c < "$f") bytes)"
