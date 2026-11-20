@@ -1,6 +1,6 @@
 # Next steps
 
-Status 2026-11-19: Backend, Mini App and Admin dashboard are merged to `main`. Backend security review is done; medium findings are fixed. Factory (`0x9593…bafc`) and ProxyBase (`0x1559…a424`) are deployed at the same addresses on Base Sepolia (84532) and Arbitrum Sepolia (421614).
+Status 2026-11-19: Backend, Mini App and Admin dashboard are merged to `main`. Backend security review is done; medium findings are fixed. Factory implementation (`0x9593…bafc`) and its ProxyBase (`0x1559…a424`; this proxy is `FACTORY_ADDRESS`) are deployed at the same addresses on Base Sepolia (84532) and Arbitrum Sepolia (421614).
 
 Plan: launch on Base Sepolia and Arbitrum Sepolia with test users and test USDC first. Contracts, fixes and features can change after that. Mainnet comes later.
 
@@ -8,7 +8,7 @@ Mark a step done by changing `[ ]` to `[x]`.
 
 ## 0. Housekeeping
 
-- [ ] **Commit `project-context.json` and `NEXT_STEPS.md`** — both are uncommitted on `main`.
+- [x] **Commit `project-context.json` and `NEXT_STEPS.md`** — both are uncommitted on `main`.
 - [x] **Write `README.md`** — it is empty. Add what the project is, folder layout, and how to run each part locally.
 - [x] **Add CI** — GitHub Actions that runs Backend `tsc` + `npm test`, Admin and Miniapp `npm run build`, and `forge test`, on every PR. Also builds the backend Docker image (see section 3).
 
@@ -33,11 +33,11 @@ Mark a step done by changing `[ ]` to `[x]`.
 
 - [ ] **Server base** — OS updates, SSH key only, 2 GB swap file, firewall (Oracle security list + host firewall) open only 22, 80, 443.
 - [ ] **DuckDNS subdomain** — create a free `<name>.duckdns.org` pointing at the server's public IP.
-- [x] **Backend Dockerfile** — multi-stage build of `dist/`; run migrations, then start the server.
+- [x] **Backend Dockerfile** — multi-stage build of `dist/`, pinned Foundry image. The container only starts the server; migrations are a separate step (`docker compose run --rm backend node dist/migrate.js`).
 - [x] **Build image off the server** — build in GitHub Actions and push to GHCR (or build locally). `npm ci` + `tsc` can run out of memory on 1 GB.
 - [ ] **Docker Compose** — services `backend` and `caddy`. Caddy gets the HTTPS certificate for the DuckDNS name automatically.
 - [ ] **Neon database** — create a project in the region nearest the Oracle server. Use the direct (non-pooled) connection string with `sslmode=require` for `DATABASE_URL` and migrations. Free-tier compute sleeps when idle, so the first query after a pause is slower.
-- [ ] **Migration runbook** — how to run `db:migrate` and seeds on a fresh DB, and the rule for future migrations once a DB holds funds.
+- [ ] **Migration runbook** — how to run `node dist/migrate.js` on a fresh DB, and the rule for future migrations once a DB holds funds: `pg_dump` first, then migrate, then pull and restart. Deploy by the `:<sha>` image tag, not `:latest`.
 - [ ] **Env and secrets** — a server-only `.env` with every variable from `Backend/.env.example`: `APP_ENV=prod`, `SESSION_SECRET`, `BOT_TOKEN`, `TELEGRAM_CLIENT_SECRET`, `TREASURY_ADDRESSES`, `RPC_URL_84532`, `RPC_URL_421614`, `FACTORY_ADDRESS`, `VAULT_CREATION_CODE_HASH`, `TRUST_PROXY_HOPS=1`. Clear the unused `RPC_URL_137/8453/56`.
 - [ ] **Bot mode** — `BOT_MODE=polling` is simplest on one server; `webhook` also works on the DuckDNS HTTPS URL.
 - [ ] **Backups** — Neon's free-tier restore window is short. Add a daily `pg_dump` from the Oracle server to Oracle Object Storage, and test one restore.

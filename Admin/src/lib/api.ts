@@ -59,8 +59,13 @@ export function useAction<T, V = void>(o: {
     onSuccess?: (r: T, v: V) => unknown;
 }) {
     const key = useRef(crypto.randomUUID());
+    // A second click before the first returns joins it instead of getting 409 in_progress.
+    const inflight = useRef<Promise<T> | undefined>(undefined);
     return useMutation({
-        mutationFn: (v: V) => o.mutationFn(v, key.current),
+        mutationFn: (v: V) =>
+            (inflight.current ??= o
+                .mutationFn(v, key.current)
+                .finally(() => (inflight.current = undefined))),
         onSuccess: (r, v) => {
             key.current = crypto.randomUUID();
             return o.onSuccess?.(r, v);

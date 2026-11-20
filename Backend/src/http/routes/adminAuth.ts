@@ -83,7 +83,7 @@ export async function adminAuthRoutes(app: FastifyInstance) {
         if (!adm) throw new AppError("Not an administrator", 403, "forbidden");
 
         const session = await signToken(
-            { adm: adm.id },
+            { adm: adm.id, t: Date.now() }, // ms issue time, for revocation
             SESSION_TTL,
             "admin-session",
         );

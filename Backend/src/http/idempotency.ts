@@ -5,8 +5,6 @@ import { db } from "../db/index.js";
 import { idempotencyKeys } from "../db/schema.js";
 import { AppError } from "../errors.js";
 
-const STALE_MS = 10 * 60 * 1000;
-
 // Requires an `Idempotency-Key` header. A retry with the same key and body
 // replays the stored response; the same key with a different body is rejected.
 export async function idempotent(
@@ -23,8 +21,10 @@ export async function idempotent(
             "idempotency_key",
         );
 
-    // Concrete path, not the route pattern: /x/:id calls for different ids never share a key.
-    const scope = `${actorId}:${req.method}:${req.url.split("?")[0]}`;
+    // Route pattern plus decoded params, lowercased: /x/:id calls for different
+    // ids never share a key, and spellings of the same id (case, %-encoding) do.
+    const scope =
+        `${actorId}:${req.method}:${req.routeOptions.url}:${JSON.stringify(req.params ?? {})}`.toLowerCase();
     const requestHash = createHash("sha256")
         .update(JSON.stringify(req.body ?? null))
         .digest("hex");
@@ -56,14 +56,10 @@ export async function idempotent(
             );
         if (row.responseStatus !== null)
             return { status: row.responseStatus, body: row.responseBody };
-        if (Date.now() - row.createdAt.getTime() > STALE_MS) {
-            await db
-                .delete(idempotencyKeys)
-                .where(eq(idempotencyKeys.id, row.id));
-            continue;
-        }
+        // Never auto-expire: a key without a response may belong to an action
+        // that committed before a crash. Re-running it could act twice.
         throw new AppError(
-            "A request with this key is still in progress",
+            "A request with this key is still in progress or was interrupted. Reload and check the current state before retrying.",
             409,
             "in_progress",
         );
