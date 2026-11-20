@@ -32,7 +32,7 @@ Mark a step done by changing `[ ]` to `[x]`.
 ## 3. Oracle server setup (backend)
 
 - [ ] **Server base** — OS updates, SSH key only, 2 GB swap file, firewall (Oracle security list + host firewall) open only 22, 80, 443.
-- [ ] **DuckDNS subdomain** — create a free `<name>.duckdns.org` pointing at the server's public IP.
+- [ ] **DuckDNS subdomain** — create a free `nzmpi.duckdns.org` pointing at the server's public IP.
 - [x] **Backend Dockerfile** — multi-stage build of `dist/`, pinned Foundry image. The container only starts the server; migrations are a separate step (`docker compose run --rm backend node dist/migrate.js`).
 - [x] **Build image off the server** — build in GitHub Actions and push to GHCR (or build locally). `npm ci` + `tsc` can run out of memory on 1 GB.
 - [x] **Docker Compose** — services `backend` and `caddy`. Caddy gets the HTTPS certificate for the DuckDNS name automatically.
@@ -47,9 +47,9 @@ Mark a step done by changing `[ ]` to `[x]`.
 
 ## 4. Vercel setup (Admin + Miniapp)
 
-- [ ] **Miniapp project** — build `Miniapp/`, set `VITE_API_URL=https://<name>.duckdns.org`. It authenticates with a header, so cross-site is fine.
+- [ ] **Miniapp project** — build `Miniapp/`, set `VITE_API_URL=https://nzmpi.duckdns.org`. It authenticates with a header, so cross-site is fine.
 - [x] **Admin rewrites** — `Admin/vercel.json` rewrites `/admin/*` (all API calls and the OIDC callback) to the backend, so the browser sees one site and the `SameSite=Lax` cookie works.
-- [ ] **Admin project** — replace `BACKEND_HOST` in `Admin/vercel.json` with the DuckDNS name, then create the Vercel project with root `Admin/` and `VITE_API_URL` unset.
+- [ ] **Admin project** — `Admin/vercel.json` points at `nzmpi.duckdns.org` (done). Create the Vercel project with root `Admin/` and `VITE_API_URL` unset.
 - [ ] **Admin callback** — set `ADMIN_ORIGIN` and `ADMIN_CALLBACK_URL` to the Admin Vercel URL, so the OIDC callback also goes through the rewrite.
 - [ ] **CORS** — set `CORS_ORIGINS` on the backend to the Miniapp Vercel URL.
 
