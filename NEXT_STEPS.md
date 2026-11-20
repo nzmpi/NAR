@@ -32,7 +32,7 @@ Mark a step done by changing `[ ]` to `[x]`.
 ## 3. Oracle server setup (backend)
 
 - [ ] **Server base** — OS updates, SSH key only, 2 GB swap file, firewall (Oracle security list + host firewall) open only 22, 80, 443.
-- [ ] **DuckDNS subdomain** — create a free `nzmpi.duckdns.org` pointing at the server's public IP.
+- [x] **DuckDNS subdomain** — `nzmpi.duckdns.org` points at the server's public IP.
 - [x] **Backend Dockerfile** — multi-stage build of `dist/`, pinned Foundry image. The container only starts the server; migrations are a separate step (`docker compose run --rm backend node dist/migrate.js`).
 - [x] **Build image off the server** — build in GitHub Actions and push to GHCR (or build locally). `npm ci` + `tsc` can run out of memory on 1 GB.
 - [x] **Docker Compose** — services `backend` and `caddy`. Caddy gets the HTTPS certificate for the DuckDNS name automatically.
