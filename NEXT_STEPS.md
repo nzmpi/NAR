@@ -46,7 +46,7 @@ Mark a step done by changing `[ ]` to `[x]`.
 ## 4. Vercel setup (Admin + Miniapp)
 
 - [ ] **Miniapp project** — build `Miniapp/`, set `VITE_API_URL=https://<name>.duckdns.org`. It authenticates with a header, so cross-site is fine.
-- [ ] **Admin project** — build `Admin/` with `VITE_API_URL` empty. Add Vercel rewrites that forward the backend's admin API paths to `https://<name>.duckdns.org`. The browser then sees the API on the same `*.vercel.app` site, so the `SameSite=Lax` session cookie works without a domain.
+- [ ] **Admin project** — Vercel project with root `Admin/`, `VITE_API_URL` unset. `Admin/vercel.json` rewrites `/admin/*` (all API calls and the OIDC callback) to the backend, so the browser sees one site and the `SameSite=Lax` cookie works. **Replace `BACKEND_HOST` in `Admin/vercel.json` with the DuckDNS name first.**
 - [ ] **Admin callback** — set `ADMIN_ORIGIN` and `ADMIN_CALLBACK_URL` to the Admin Vercel URL, so the OIDC callback also goes through the rewrite.
 - [ ] **CORS** — set `CORS_ORIGINS` on the backend to the Miniapp Vercel URL.
 
