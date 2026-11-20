@@ -55,7 +55,7 @@ docker run --rm --env-file Backend/.env nar-backend node dist/migrate.js
 docker run --env-file Backend/.env -p 3000:3000 nar-backend
 ```
 
-Server deploy: `deploy/compose.yml` runs the GHCR image behind Caddy (automatic HTTPS). Usage is in the file header.
+Server deploy: `deploy/compose.yml` runs the GHCR image behind Caddy (automatic HTTPS). Usage is in the file header; migrations and backups are in `deploy/RUNBOOK.md`.
 
 ## Mini App
 
