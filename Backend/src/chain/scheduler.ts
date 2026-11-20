@@ -5,6 +5,7 @@ import { chains } from "../db/schema.js";
 import { hasRpc } from "./client.js";
 import { expireStaleIntents } from "../services/depositIntents.js";
 import { scanChain } from "../services/transferScanner.js";
+import { beat } from "../heartbeat.js";
 
 type Log = { error: (...a: unknown[]) => void };
 
@@ -22,14 +23,18 @@ export function startScanner(log: Log) {
                 .select()
                 .from(chains)
                 .where(eq(chains.isActive, true));
+            let allOk = true;
             for (const c of active) {
                 if (!hasRpc(c.chainId)) continue;
                 try {
                     await scanChain(db, { id: c.id, chainId: c.chainId });
                 } catch (e) {
+                    allOk = false;
                     log.error(e);
                 }
             }
+            // One failing chain (e.g. RPC down) counts as a stall.
+            if (allOk) beat("scanner");
         } catch (e) {
             log.error(e);
         } finally {

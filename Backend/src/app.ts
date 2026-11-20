@@ -11,6 +11,7 @@ import { adminAuthRoutes } from "./http/routes/adminAuth.js";
 import { adminRoutes } from "./http/routes/admin.js";
 import { userRoutes } from "./http/routes/user.js";
 import { registerBotWebhook } from "./bot/bot.js";
+import { workerStatus } from "./heartbeat.js";
 
 // bigint -> JSON string (money is exchanged as integer strings).
 (BigInt.prototype as any).toJSON = function (this: bigint) {
@@ -61,6 +62,28 @@ export async function buildApp() {
                 .code(503)
                 .send({ status: "error", database: "unavailable" });
         }
+    });
+
+    // Uptime monitor target: 503 if the DB is down or a background loop stalled.
+    app.get("/health/ready", async (_req, reply) => {
+        const r = {
+            database: "ok",
+            scanner: workerStatus("scanner", config.SCAN_INTERVAL_SECONDS),
+            outbox: workerStatus("outbox", config.OUTBOX_INTERVAL_SECONDS),
+        };
+        try {
+            await db.execute(sql`SELECT 1`);
+        } catch (e) {
+            app.log.error(e);
+            r.database = "unavailable";
+        }
+        const ok =
+            r.database === "ok" &&
+            r.scanner !== "stalled" &&
+            r.outbox !== "stalled";
+        return reply
+            .code(ok ? 200 : 503)
+            .send({ status: ok ? "ok" : "error", ...r });
     });
 
     await app.register(userRoutes);

@@ -41,7 +41,7 @@ Mark a step done by changing `[ ]` to `[x]`.
 - [ ] **Env and secrets** — a server-only `.env` with every variable from `Backend/.env.example`: `APP_ENV=prod`, `SESSION_SECRET`, `BOT_TOKEN`, `TELEGRAM_CLIENT_SECRET`, `TREASURY_ADDRESSES`, `RPC_URL_84532`, `RPC_URL_421614`, `FACTORY_ADDRESS`, `VAULT_CREATION_CODE_HASH`, `TRUST_PROXY_HOPS=1`. Clear the unused `RPC_URL_137/8453/56`.
 - [ ] **Bot mode** — `BOT_MODE=polling` is simplest on one server; `webhook` also works on the DuckDNS HTTPS URL.
 - [ ] **Backups** — `deploy/backup.sh` does a daily `pg_dump` to Oracle Object Storage. Left on the server: bucket, write-only PAR, cron, and one test restore (`deploy/RUNBOOK.md`).
-- [ ] **Monitoring** — uptime check on the health endpoint; alert when the scanner or notification outbox stalls.
+- [ ] **Monitoring** — `GET /health/ready` returns 503 when the DB is down or the scanner/outbox stalls. Left: point an external uptime monitor at it (`deploy/RUNBOOK.md`).
 
 ## 4. Vercel setup (Admin + Miniapp)
 

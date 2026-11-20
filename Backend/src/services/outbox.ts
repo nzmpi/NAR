@@ -2,6 +2,7 @@ import { and, eq, lte, sql } from "drizzle-orm";
 import { config } from "../config.js";
 import { db } from "../db/index.js";
 import { notificationOutbox, users } from "../db/schema.js";
+import { beat } from "../heartbeat.js";
 
 type Log = { error: (...a: unknown[]) => void };
 type Database = Pick<typeof db, "insert">;
@@ -126,6 +127,7 @@ export function startOutbox(log: Log) {
             while ((await drainOutbox(log)) === BATCH) {
                 /* keep draining */
             }
+            beat("outbox");
         } catch (e) {
             log.error(e);
         } finally {
