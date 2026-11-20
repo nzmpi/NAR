@@ -31,7 +31,8 @@ Mark a step done by changing `[ ]` to `[x]`.
 
 ## 3. Oracle server setup (backend)
 
-- [ ] **Server base** — OS updates, SSH key only, 2 GB swap file, firewall (Oracle security list + host firewall) open only 22, 80, 443.
+- [x] **Server setup script** — `deploy/server-setup.sh`: OS updates, SSH key only, 2 GB swap file, host firewall open only 22, 80, 443, Docker.
+- [ ] **Server base** — open TCP 80/443 and UDP 443 in the Oracle security list, then run the script on the server (`deploy/RUNBOOK.md`).
 - [x] **DuckDNS subdomain** — `nzmpi.duckdns.org` points at the server's public IP.
 - [x] **Backend Dockerfile** — multi-stage build of `dist/`, pinned Foundry image. The container only starts the server; migrations are a separate step (`docker compose run --rm backend node dist/migrate.js`).
 - [x] **Build image off the server** — build in GitHub Actions and push to GHCR (or build locally). `npm ci` + `tsc` can run out of memory on 1 GB.
