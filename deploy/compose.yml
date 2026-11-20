@@ -1,0 +1,27 @@
+# On the server: `docker login ghcr.io` if the image is private. Put the backend .env next to this file, add TAG and DOMAIN to it, then
+#   docker compose run --rm backend node dist/migrate.js   # after a pg_dump
+#   docker compose up -d
+services:
+    backend:
+        # Deploy a commit sha, not :latest, so a restart never pulls an untested image.
+        image: ghcr.io/nzmpi/nar-backend:${TAG:?set TAG to a commit sha}
+        env_file: .env
+        environment:
+            HOST: 0.0.0.0 # reachable from caddy; .env.example has 127.0.0.1
+        restart: unless-stopped
+
+    caddy:
+        image: caddy:2
+        depends_on: [backend]
+        ports: ["80:80", "443:443", "443:443/udp"]
+        environment:
+            DOMAIN: ${DOMAIN:?set DOMAIN to the DuckDNS name}
+        volumes:
+            - ./Caddyfile:/etc/caddy/Caddyfile:ro
+            - caddy_data:/data # certificates
+            - caddy_config:/config
+        restart: unless-stopped
+
+volumes:
+    caddy_data:
+    caddy_config:
