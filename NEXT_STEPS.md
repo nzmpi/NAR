@@ -40,7 +40,7 @@ Mark a step done by changing `[ ]` to `[x]`.
 - [x] **Migration runbook** — how to run `node dist/migrate.js` on a fresh DB, and the rule for future migrations once a DB holds funds: `pg_dump` first, then migrate, then pull and restart. Deploy by the `:<sha>` image tag, not `:latest`.
 - [ ] **Env and secrets** — a server-only `.env` with every variable from `Backend/.env.example`: `APP_ENV=prod`, `SESSION_SECRET`, `BOT_TOKEN`, `TELEGRAM_CLIENT_SECRET`, `TREASURY_ADDRESSES`, `RPC_URL_84532`, `RPC_URL_421614`, `FACTORY_ADDRESS`, `VAULT_CREATION_CODE_HASH`, `TRUST_PROXY_HOPS=1`. Clear the unused `RPC_URL_137/8453/56`.
 - [ ] **Bot mode** — `BOT_MODE=polling` is simplest on one server; `webhook` also works on the DuckDNS HTTPS URL.
-- [ ] **Backups** — Neon's free-tier restore window is short. Add a daily `pg_dump` from the Oracle server to Oracle Object Storage, and test one restore.
+- [ ] **Backups** — `deploy/backup.sh` does a daily `pg_dump` to Oracle Object Storage. Left on the server: bucket, write-only PAR, cron, and one test restore (`deploy/RUNBOOK.md`).
 - [ ] **Monitoring** — uptime check on the health endpoint; alert when the scanner or notification outbox stalls.
 
 ## 4. Vercel setup (Admin + Miniapp)

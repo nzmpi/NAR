@@ -44,6 +44,16 @@ Restore (overwrites the tables in the target DB):
 docker run --rm -i postgres:17 pg_restore --clean --if-exists --no-owner -d "$DATABASE_URL" < nar-YYYY-MM-DD-HHMM.dump
 ```
 
+### Daily backup
+
+Neon's free-tier restore window is short, so `backup.sh` keeps our own copies.
+
+1. In Oracle Object Storage, create a private bucket. Add a lifecycle rule that deletes objects after 30 days.
+2. Create a pre-authenticated request on the bucket: "Permit object writes", no listing, long expiry. Put its URL (ends in `/o/`) in `.env` as `BACKUP_PAR_URL`. Note the expiry date; renew it before then.
+3. Run `./backup.sh` once by hand and check the object in the bucket.
+4. Add the cron line from the top of `backup.sh`.
+5. Test a restore: download one dump from the console and restore it into a scratch Neon branch with the command above.
+
 ## Rules once the DB holds funds
 
 - The old container keeps serving while `migrate.js` runs, so every migration must work with the previous code: add tables and nullable columns only.
