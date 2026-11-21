@@ -102,13 +102,19 @@ export async function getPortfolio(database: Database, userId: string) {
     let total = 0n,
         liquidPrincipal = 0n,
         lockedPrincipal = 0n,
-        weighted = 0n;
+        weighted = 0n,
+        manager = 0n;
     const out = [];
     for (const l of lots) {
         const key = keyById.get(l.poolId)!;
-        if (key === "manager") continue; // manager pool is admin-only
         const value = valueOfShares(state[key], BigInt(l.shares));
         const reserved = valueOfShares(state[key], BigInt(l.reservedShares));
+        // Manager pool (admins only): reported apart, so totals and APY stay
+        // about user pools; withdrawals draw on it fee-free after liquid.
+        if (key === "manager") {
+            manager += value - reserved;
+            continue;
+        }
         const principal = BigInt(l.principalUsd);
         const bps = APY_BPS[key];
         total += value;
@@ -160,6 +166,7 @@ export async function getPortfolio(database: Database, userId: string) {
         accruedYieldUsd: total - liquidPrincipal - lockedPrincipal,
         projectedApyBps: total > 0n ? Number(weighted / total) : null,
         historicalApy: perf.apy,
+        managerAvailableUsd: manager,
         lots: out,
         pendingDeposits: pending,
     };

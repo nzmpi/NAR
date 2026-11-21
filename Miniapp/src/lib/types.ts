@@ -65,6 +65,7 @@ export interface Portfolio {
     accruedYieldUsd: string;
     projectedApyBps: number | null;
     historicalApy: number | null;
+    managerAvailableUsd: string;
     lots: Lot[];
     pendingDeposits: PendingDeposit[];
 }

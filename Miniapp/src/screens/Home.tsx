@@ -63,6 +63,14 @@ export function Home() {
                             ${fmtUsd(p.lockedPrincipalUsd)}
                         </div>
                     </div>
+                    {BigInt(p.managerAvailableUsd) > 0n && (
+                        <div className="col-span-2">
+                            <Hint>Manager funds (not in total)</Hint>
+                            <div className="tnum">
+                                ${fmtUsd(p.managerAvailableUsd)}
+                            </div>
+                        </div>
+                    )}
                     <div>
                         <Hint>Projected APY</Hint>
                         <div className="tnum">
