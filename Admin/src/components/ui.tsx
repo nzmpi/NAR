@@ -1,3 +1,4 @@
+import { Component } from "react";
 import type {
     ButtonHTMLAttributes,
     InputHTMLAttributes,
@@ -218,3 +219,75 @@ export const signedUsd = (v: bigint, fmt: (x: bigint) => string) =>
     `${v > 0n ? "+" : v < 0n ? "−" : ""}$${fmt(v < 0n ? -v : v)}`;
 export const toneOf = (v: bigint) =>
     v > 0n ? "var(--good)" : v < 0n ? "var(--bad)" : undefined;
+
+// Shows the error instead of a blank page when a screen crashes.
+export class ErrorBoundary extends Component<
+    { children: ReactNode },
+    { error: Error | null }
+> {
+    state = { error: null as Error | null };
+    static getDerivedStateFromError(error: Error) {
+        return { error };
+    }
+    render() {
+        if (!this.state.error) return this.props.children;
+        return (
+            <div
+                role="alert"
+                className="space-y-2 rounded-2xl border border-[var(--line)] bg-[var(--bad-soft)] p-5 text-[var(--bad)]"
+            >
+                <p className="font-semibold">This page failed to load.</p>
+                <p className="text-sm">{this.state.error.message}</p>
+                <Button variant="ghost" onClick={() => location.reload()}>
+                    Reload
+                </Button>
+            </div>
+        );
+    }
+}
+
+// Block explorers by EVM chain id. Unknown chains show plain text.
+const EXPLORERS: Record<number, string> = {
+    1: "https://etherscan.io",
+    11155111: "https://sepolia.etherscan.io",
+    56: "https://bscscan.com",
+    97: "https://testnet.bscscan.com",
+    8453: "https://basescan.org",
+    84532: "https://sepolia.basescan.org",
+    42161: "https://arbiscan.io",
+    421614: "https://sepolia.arbiscan.io",
+    10: "https://optimistic.etherscan.io",
+    137: "https://polygonscan.com",
+};
+
+// An address or tx hash, linked to its explorer page when the chain is known.
+export function Onchain({
+    value,
+    chainId,
+    short = false,
+}: {
+    value: string;
+    chainId?: number;
+    short?: boolean;
+}) {
+    const base = chainId === undefined ? undefined : EXPLORERS[chainId];
+    const kind = /^0x[0-9a-fA-F]{64}$/.test(value) ? "tx" : "address";
+    const text = short ? `${value.slice(0, 6)}…${value.slice(-4)}` : value;
+    if (!base)
+        return (
+            <span className="font-mono text-xs break-all" title={value}>
+                {text}
+            </span>
+        );
+    return (
+        <a
+            href={`${base}/${kind}/${value}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`Open on explorer: ${value}`}
+            className="font-mono text-xs break-all text-[var(--link)] hover:underline"
+        >
+            {text}
+        </a>
+    );
+}

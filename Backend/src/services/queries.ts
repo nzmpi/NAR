@@ -272,11 +272,13 @@ export function adminListDeposits(database: Database, status?: string) {
             vaultDeployed: vaults.isDeployed,
             symbol: assets.symbol,
             decimals: assets.decimals,
+            chainId: chains.chainId,
         })
         .from(depositIntents)
         .innerJoin(users, eq(users.id, depositIntents.userId))
         .innerJoin(vaults, eq(vaults.id, depositIntents.vaultId))
         .innerJoin(assets, eq(assets.id, depositIntents.assetId))
+        .innerJoin(chains, eq(chains.id, assets.chainId))
         .where(status ? eq(depositIntents.status, status) : undefined)
         .orderBy(desc(depositIntents.createdAt))
         .limit(LIMIT);
