@@ -45,7 +45,7 @@ export function Withdrawals() {
             {q.isLoading && <Hint>Loading…</Hint>}
             <ErrorText error={q.error} />
             {q.data?.length === 0 && <Hint>Nothing here.</Hint>}
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,340px),1fr))] items-start gap-3">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,360px),1fr))] items-start gap-3">
                 {q.data?.map((r) => (
                     <Row
                         key={r.withdrawal.id}
@@ -113,7 +113,7 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
                 </div>
                 <Badge status={w.status} />
             </div>
-            <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm tnum">
+            <dl className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-x-3 gap-y-2 text-sm tnum">
                 <div>
                     <dt className="text-xs text-[var(--hint)]">Gross</dt>
                     <dd>${fmtUsd(w.grossAmountUsd)}</dd>
@@ -132,9 +132,9 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
                 </div>
             </dl>
             <div className="text-sm">
-                <span className="text-[var(--hint)]">
-                    To (chain {r.chainId}):{" "}
-                </span>
+                <div className="text-xs text-[var(--hint)]">
+                    To (chain {r.chainId})
+                </div>
                 <Mono>{w.destinationAddress}</Mono>
             </div>
             {w.txHash && (

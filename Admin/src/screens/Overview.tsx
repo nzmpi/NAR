@@ -93,15 +93,6 @@ export function Overview({
 
     return (
         <div className="flex flex-col gap-5">
-            <div className="flex justify-end">
-                <Segmented
-                    label="Range"
-                    options={RANGES}
-                    value={range}
-                    onChange={setRange}
-                />
-            </div>
-
             {todo.length > 0 && (
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-[14px] border border-[var(--warn-line)] bg-[var(--warn-soft)] px-[18px] py-3.5">
                     <span className="font-semibold text-[var(--warn)]">
@@ -118,6 +109,15 @@ export function Overview({
                     ))}
                 </div>
             )}
+
+            <div className="flex justify-end">
+                <Segmented
+                    label="Range"
+                    options={RANGES}
+                    value={range}
+                    onChange={setRange}
+                />
+            </div>
 
             <section
                 aria-label="Key figures"
