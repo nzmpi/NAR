@@ -191,8 +191,16 @@ export function Users() {
                                             >
                                                 {name(u)}
                                             </button>
-                                            <div className="text-xs text-[var(--hint)]">
+                                            <div
+                                                className={`text-xs ${u.isAdmin ? "font-medium text-[var(--admin)]" : "text-[var(--hint)]"}`}
+                                                title={
+                                                    u.isAdmin
+                                                        ? "Admin account"
+                                                        : undefined
+                                                }
+                                            >
                                                 tg {u.telegramId}
+                                                {u.isAdmin && " · admin"}
                                             </div>
                                         </td>
                                         <td
@@ -500,23 +508,25 @@ function UserDetail({ u }: { u: AdminUser }) {
                 >
                     Add vault
                 </Button>
-                <Button
-                    className="ml-auto"
-                    variant={u.isBlocked ? "ghost" : "danger"}
-                    disabled={block.isPending}
-                    onClick={() => {
-                        if (
-                            confirm(
-                                u.isBlocked
-                                    ? "Unblock this user?"
-                                    : "Block this user? They will lose access to the app.",
+                {!u.isAdmin && (
+                    <Button
+                        className="ml-auto"
+                        variant={u.isBlocked ? "ghost" : "danger"}
+                        disabled={block.isPending}
+                        onClick={() => {
+                            if (
+                                confirm(
+                                    u.isBlocked
+                                        ? "Unblock this user?"
+                                        : "Block this user? They will lose access to the app.",
+                                )
                             )
-                        )
-                            block.mutate();
-                    }}
-                >
-                    {u.isBlocked ? "Unblock user" : "Block user"}
-                </Button>
+                                block.mutate();
+                        }}
+                    >
+                        {u.isBlocked ? "Unblock user" : "Block user"}
+                    </Button>
+                )}
             </div>
             <ErrorText error={block.error || addVault.error} />
         </div>

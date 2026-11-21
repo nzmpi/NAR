@@ -165,6 +165,7 @@ export interface AdminUser {
     // Missing from older API builds; the UI shows "-" then.
     balanceUsd?: string; // micro-USD, current value of open positions
     vaultCount?: number; // active vaults
+    isAdmin?: boolean; // has an active admin account
 }
 
 export interface AdminVault {
