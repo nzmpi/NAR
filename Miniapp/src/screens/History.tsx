@@ -42,7 +42,10 @@ export function History() {
                         ? `+$${fmtUsd(d.confirmedAmountUsd)}`
                         : `${formatUnits(d.intendedAmount, a?.decimals ?? 6, 2)} ${a?.symbol ?? ""}`,
                     note: d.allocations
-                        .map((x) => `${POOL_LABEL[x.pool]} ${x.bps / 100}%`)
+                        .map(
+                            (x) =>
+                                `${POOL_LABEL[x.pool] ?? "Manager"} ${x.bps / 100}%`,
+                        )
                         .join(", "),
                 };
             }),

@@ -22,6 +22,8 @@ const ACTIVE = [
     "ready_to_activate",
 ];
 
+type DepositPool = PoolKey | "manager";
+
 export function Deposit() {
     const assets = useQuery({
         queryKey: ["assets"],
@@ -77,11 +79,19 @@ function NewDeposit({ assets, vaults }: { assets: Asset[]; vaults: Vault[] }) {
     const key = useRef(newKey());
     const [assetId, setAssetId] = useState(assets[0]?.assetId ?? "");
     const [amount, setAmount] = useState("");
-    const [alloc, setAlloc] = useState<Record<PoolKey, string>>({
+    const me = useQuery({
+        queryKey: ["me"],
+        queryFn: () => api<{ id: string; isAdmin?: boolean }>("/me"),
+    });
+    const pools: DepositPool[] = me.data?.isAdmin
+        ? [...USER_POOLS, "manager"]
+        : USER_POOLS;
+    const [alloc, setAlloc] = useState<Record<DepositPool, string>>({
         liquid: "100",
         lock_1m: "",
         lock_2m: "",
         lock_3m: "",
+        manager: "",
     });
 
     const asset = assets.find((a) => a.assetId === assetId);
@@ -95,7 +105,7 @@ function NewDeposit({ assets, vaults }: { assets: Asset[]; vaults: Vault[] }) {
         asset &&
         units !== null &&
         units >= BigInt(MIN_USD) * 10n ** BigInt(asset.decimals);
-    const parts = USER_POOLS.map((p) => ({
+    const parts = pools.map((p) => ({
         pool: p,
         pct: Number(alloc[p] || 0),
     }));
@@ -164,13 +174,24 @@ function NewDeposit({ assets, vaults }: { assets: Asset[]; vaults: Vault[] }) {
             <div>
                 <Hint>Split between tiers (whole percent, must total 100)</Hint>
                 <div className="space-y-2 mt-1">
-                    {USER_POOLS.map((p) => (
+                    {pools.map((p) => (
                         <div key={p} className="flex items-center gap-3">
                             <span className="flex-1">
-                                {POOL_LABEL[p]}{" "}
-                                <span className="text-[var(--hint)]">
-                                    · {bpsPct(POOL_APY_BPS[p])}
-                                </span>
+                                {p === "manager" ? (
+                                    <>
+                                        Manager{" "}
+                                        <span className="text-[var(--hint)]">
+                                            · admin only
+                                        </span>
+                                    </>
+                                ) : (
+                                    <>
+                                        {POOL_LABEL[p]}{" "}
+                                        <span className="text-[var(--hint)]">
+                                            · {bpsPct(POOL_APY_BPS[p])}
+                                        </span>
+                                    </>
+                                )}
                             </span>
                             <input
                                 inputMode="numeric"
