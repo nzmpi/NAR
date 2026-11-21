@@ -59,6 +59,7 @@ export function Deposits() {
 
     return (
         <div className="space-y-4">
+            <CheckVaults />
             <div className="flex flex-wrap gap-1">
                 {(Object.keys(GROUPS) as Group[]).map((g) => (
                     <button
@@ -88,6 +89,51 @@ export function Deposits() {
                 ))}
             </div>
         </div>
+    );
+}
+
+type ScanResult = {
+    chains: {
+        chain: string;
+        funded?: number;
+        found?: number;
+        error?: string;
+    }[];
+};
+
+function CheckVaults() {
+    const qc = useQueryClient();
+    const scan = useAction({
+        mutationFn: (_, key) =>
+            api<ScanResult>("/admin/scan", { method: "POST", key }),
+        onSuccess: () => {
+            for (const k of ["admin-deposits", "admin-transfers"])
+                qc.invalidateQueries({ queryKey: [k] });
+        },
+    });
+    return (
+        <Card className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+                <Hint>
+                    Reads every vault's balance. Vaults that hold tokens are
+                    scanned for new deposits.
+                </Hint>
+                <Button disabled={scan.isPending} onClick={() => scan.mutate()}>
+                    {scan.isPending ? "Checking…" : "Check vaults"}
+                </Button>
+            </div>
+            {scan.data?.chains.map((c) => (
+                <p key={c.chain} className="text-sm">
+                    {c.chain}:{" "}
+                    {c.error ? (
+                        <span className="text-[var(--bad)]">{c.error}</span>
+                    ) : (
+                        `${c.funded} funded vault(s), ${c.found} new transfer(s)`
+                    )}
+                </p>
+            ))}
+            <ErrorText error={scan.error} />
+        </Card>
     );
 }
 

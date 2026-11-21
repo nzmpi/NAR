@@ -8,7 +8,8 @@ import {
     vaults,
 } from "../db/schema.js";
 import { config } from "../config.js";
-import { hasRpc } from "../chain/client.js";
+import { getClient, hasRpc } from "../chain/client.js";
+import { erc20Abi, type Address } from "viem";
 import {
     getBlockTimestamp,
     getHead,
@@ -117,7 +118,7 @@ async function autoMatchAll(
 
 const inflight = new Map<
     string,
-    Promise<{ scanned: boolean; found: number }>
+    Promise<{ scanned: boolean; funded: number; found: number }>
 >();
 const lastRun = new Map<string, number>();
 
@@ -133,7 +134,7 @@ async function doScan(database: Database, chain: ChainRow) {
         : head - BigInt(config.SCAN_LOOKBACK_BLOCKS);
     if (from < 0n) from = 0n;
 
-    const vs = await database
+    const all = await database
         .select({ address: vaults.address })
         .from(vaults)
         .where(and(eq(vaults.chainId, chain.id), eq(vaults.isActive, true)));
@@ -141,6 +142,15 @@ async function doScan(database: Database, chain: ChainRow) {
         .select({ tokenAddress: assets.tokenAddress })
         .from(assets)
         .where(and(eq(assets.chainId, chain.id), eq(assets.isActive, true)));
+
+    // Logs are only fetched for vaults holding a balance at `head`. Deposits
+    // are only swept after they are recorded, so an empty vault has nothing new.
+    const vs = await fundedVaults(
+        chain.chainId,
+        all.map((v) => v.address),
+        toks.map((t) => t.tokenAddress),
+        head,
+    );
 
     let found = 0;
     if (vs.length && toks.length) {
@@ -150,7 +160,7 @@ async function doScan(database: Database, chain: ChainRow) {
             const logs = await getTransfersInRange(
                 chain.chainId,
                 toks.map((t) => t.tokenAddress),
-                vs.map((v) => v.address),
+                vs,
                 s,
                 e,
             );
@@ -171,7 +181,34 @@ async function doScan(database: Database, chain: ChainRow) {
             target: chainScanState.chainId,
             set: { lastScannedBlock: head.toString(), updatedAt: new Date() },
         });
-    return { scanned: true, found };
+    return { scanned: true, funded: vs.length, found };
+}
+
+// Multicall3 is deployed at this address on every chain we use.
+const MULTICALL3 = "0xcA11bde05977b3631167028862bE2a173976CA11";
+
+async function fundedVaults(
+    chainId: number,
+    vaultAddrs: string[],
+    tokens: string[],
+    blockNumber: bigint,
+) {
+    if (!vaultAddrs.length || !tokens.length) return [];
+    const pairs = vaultAddrs.flatMap((v) => tokens.map((t) => [v, t]));
+    const balances = await getClient(chainId).multicall({
+        multicallAddress: MULTICALL3,
+        allowFailure: false,
+        blockNumber,
+        contracts: pairs.map(([v, t]) => ({
+            address: t as Address,
+            abi: erc20Abi,
+            functionName: "balanceOf" as const,
+            args: [v as Address] as const,
+        })),
+    });
+    return [
+        ...new Set(pairs.filter((_, i) => balances[i] > 0n).map(([v]) => v)),
+    ];
 }
 
 // One scan at a time per chain; callers can ask for a minimum gap between scans.
@@ -186,7 +223,7 @@ export async function scanChain(
         minIntervalMs &&
         Date.now() - (lastRun.get(chain.id) ?? 0) < minIntervalMs
     )
-        return { scanned: false, found: 0 };
+        return { scanned: false, funded: 0, found: 0 };
     const p = doScan(database, chain).finally(() => {
         inflight.delete(chain.id);
         lastRun.set(chain.id, Date.now());

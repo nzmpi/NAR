@@ -1,16 +1,13 @@
-import { eq } from "drizzle-orm";
 import { config } from "../config.js";
 import { db } from "../db/index.js";
-import { chains } from "../db/schema.js";
-import { hasRpc } from "./client.js";
 import { expireStaleIntents } from "../services/depositIntents.js";
-import { scanChain } from "../services/transferScanner.js";
 import { beat } from "../heartbeat.js";
 
 type Log = { error: (...a: unknown[]) => void };
 
-// Periodically scans active chains for transfers into known vaults and
-// expires stale deposit intents (24h). SCAN_INTERVAL_SECONDS=0 disables it.
+// Periodically expires stale deposit intents (24h). Chains are not scanned on
+// a timer (RPC rate limits): the admin's "Check vaults" button and the user's
+// "I sent it" do that. SCAN_INTERVAL_SECONDS=0 disables it.
 export function startScanner(log: Log) {
     if (config.SCAN_INTERVAL_SECONDS === 0) return;
     let running = false;
@@ -19,22 +16,7 @@ export function startScanner(log: Log) {
         running = true;
         try {
             await expireStaleIntents(db);
-            const active = await db
-                .select()
-                .from(chains)
-                .where(eq(chains.isActive, true));
-            let allOk = true;
-            for (const c of active) {
-                if (!hasRpc(c.chainId)) continue;
-                try {
-                    await scanChain(db, { id: c.id, chainId: c.chainId });
-                } catch (e) {
-                    allOk = false;
-                    log.error(e);
-                }
-            }
-            // One failing chain (e.g. RPC down) counts as a stall.
-            if (allOk) beat("scanner");
+            beat("scanner");
         } catch (e) {
             log.error(e);
         } finally {
