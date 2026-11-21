@@ -362,10 +362,19 @@ export async function adminListUsers(database: Database) {
     const nonces = new Map<string, Set<number>>();
     for (const v of vaultRows)
         nonces.set(v.userId, (nonces.get(v.userId) ?? new Set()).add(v.nonce));
+    const adminIds = new Set(
+        (
+            await database
+                .select({ telegramId: admins.telegramId })
+                .from(admins)
+                .where(eq(admins.isActive, true))
+        ).map((a) => a.telegramId),
+    );
     return list.map((u) => ({
         ...u,
         balanceUsd: balance.get(u.id) ?? 0n,
         vaultCount: nonces.get(u.id)?.size ?? 0,
+        isAdmin: adminIds.has(u.telegramId),
     }));
 }
 

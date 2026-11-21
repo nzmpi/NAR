@@ -385,6 +385,11 @@ ok(true, "<10% NAV move needs no confirmation");
         again.find((x) => x.id === bob.id)!.vaultCount === 1,
         "user with one vault counts one",
     );
+    ok(
+        again.find((x) => x.id === adminUser.id)!.isAdmin &&
+            !again.find((x) => x.id === alice.id)!.isAdmin,
+        "user list flags admin accounts",
+    );
 }
 console.log("integration ok");
 process.exit(0);
