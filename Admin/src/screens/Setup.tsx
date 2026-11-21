@@ -9,12 +9,12 @@ import {
     Field,
     Hint,
     Input,
-    Mono,
     Panel,
     Select,
     TD,
     TH,
     Warn,
+    Onchain,
 } from "../components/ui";
 
 const Foot = ({ children }: { children: React.ReactNode }) => (
@@ -182,11 +182,7 @@ function AssetRow({ a, onDone }: { a: AdminAsset; onDone: () => void }) {
                 <div className="text-xs text-[var(--hint)]">{a.chainName}</div>
             </td>
             <td className={`${TD} text-[var(--soft)]`}>
-                <span title={a.tokenAddress}>
-                    <Mono>
-                        {a.tokenAddress.slice(0, 6)}…{a.tokenAddress.slice(-4)}
-                    </Mono>
-                </span>
+                <Onchain value={a.tokenAddress} chainId={a.chainId} short />
             </td>
             <td className={`${TD} text-right tnum`}>{a.decimals}</td>
             <td className={TD}>
@@ -286,6 +282,7 @@ function AddAsset({
                     />
                 </Field>
                 <Button
+                    className="ml-auto"
                     disabled={
                         !/^0x[a-fA-F0-9]{40}$/.test(addr.trim()) ||
                         !dec ||

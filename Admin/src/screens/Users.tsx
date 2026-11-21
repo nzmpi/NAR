@@ -23,6 +23,7 @@ import {
     Select,
     TD,
     TH,
+    Onchain,
 } from "../components/ui";
 
 const STATUS = [
@@ -50,6 +51,7 @@ export function Users() {
     const s = search.trim().toLowerCase().replace(/^@/, "");
     const okVaults = (u: AdminUser) => {
         const n = u.vaultCount;
+        if (n === undefined) return vf === "any";
         if (vf === "any") return true;
         if (vf === "full") return n >= u.maxVaults;
         if (vf === "2") return n >= 2;
@@ -63,7 +65,9 @@ export function Users() {
                 u.id.startsWith(s)) &&
             (status === "all" || (status === "blocked") === u.isBlocked) &&
             okVaults(u) &&
-            (bf === "any" || (bf === "zero") === (BigInt(u.balanceUsd) === 0n)),
+            (bf === "any" ||
+                (u.balanceUsd !== undefined &&
+                    (bf === "zero") === (BigInt(u.balanceUsd) === 0n))),
     );
     const filtered = status !== "all" || vf !== "any" || bf !== "any";
     const sel = users.find((u) => u.id === open);
@@ -196,10 +200,13 @@ export function Users() {
                                         <td
                                             className={`${TD} text-right font-medium`}
                                         >
-                                            ${fmtUsd(u.balanceUsd)}
+                                            {u.balanceUsd === undefined
+                                                ? "–"
+                                                : `$${fmtUsd(u.balanceUsd)}`}
                                         </td>
                                         <td className={`${TD} text-right`}>
-                                            {u.vaultCount} / {u.maxVaults}
+                                            {u.vaultCount ?? "–"} /{" "}
+                                            {u.maxVaults}
                                         </td>
                                         <td className={TD}>
                                             <Pill
@@ -553,7 +560,7 @@ function VaultRow({ v, userId }: { v: AdminVault; userId: string }) {
                 </span>
                 <Badge status={v.isDeployed ? "deployed" : "not deployed"} />
             </div>
-            <Mono>{v.address}</Mono>
+            <Onchain value={v.address} chainId={v.chainId} />
             <div className="flex flex-wrap gap-2">
                 <Button
                     size="sm"

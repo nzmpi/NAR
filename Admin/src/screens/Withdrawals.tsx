@@ -10,8 +10,8 @@ import {
     ErrorText,
     Hint,
     Input,
-    Mono,
     Segmented,
+    Onchain,
 } from "../components/ui";
 
 const FILTERS = ["pending", "paid", "rejected", "cancelled", "all"] as const;
@@ -135,12 +135,12 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
                 <div className="text-xs text-[var(--hint)]">
                     To (chain {r.chainId})
                 </div>
-                <Mono>{w.destinationAddress}</Mono>
+                <Onchain value={w.destinationAddress} chainId={r.chainId} />
             </div>
             {w.txHash && (
                 <div className="text-sm">
                     <span className="text-[var(--hint)]">Tx: </span>
-                    <Mono>{w.txHash}</Mono>
+                    <Onchain value={w.txHash} chainId={r.chainId} />
                 </div>
             )}
             {w.rejectionReason && (

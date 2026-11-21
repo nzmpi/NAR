@@ -9,7 +9,7 @@ import {
     ErrorText,
     Hint,
     Input,
-    Mono,
+    Onchain,
     Select,
     Warn,
 } from "../components/ui";
@@ -59,6 +59,10 @@ export function Transfers() {
                     <TransferRow
                         key={t.id}
                         t={t}
+                        chainId={
+                            chains.data?.find((c) => c.id === t.chainId)
+                                ?.chainId
+                        }
                         deps={deps}
                         onDone={refresh}
                     />
@@ -71,10 +75,12 @@ export function Transfers() {
 
 function TransferRow({
     t,
+    chainId,
     deps,
     onDone,
 }: {
     t: AdminTransfer;
+    chainId?: number;
     deps: AdminDeposit[];
     onDone: () => void;
 }) {
@@ -106,12 +112,12 @@ function TransferRow({
             </div>
             <div className="text-sm">
                 <span className="text-[var(--hint)]">Tx: </span>
-                <Mono>{t.txHash}</Mono>
+                <Onchain value={t.txHash} chainId={chainId} />
             </div>
             {t.fromAddress && (
                 <div className="text-sm">
                     <span className="text-[var(--hint)]">From: </span>
-                    <Mono>{t.fromAddress}</Mono>
+                    <Onchain value={t.fromAddress} chainId={chainId} />
                 </div>
             )}
             {candidates.length === 0 ? (

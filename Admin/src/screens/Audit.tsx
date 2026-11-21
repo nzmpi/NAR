@@ -12,6 +12,7 @@ import {
     TD,
     TH,
     type Tone,
+    Onchain,
 } from "../components/ui";
 
 // Color only hints at the outcome; the action text stays the source of truth.
@@ -144,6 +145,12 @@ export function Audit() {
     );
 }
 
+// Only numeric EVM chain ids in the details are trusted for links.
+const chainOf = (d: unknown) => {
+    const c = (d as { chainId?: unknown } | null)?.chainId;
+    return typeof c === "number" ? c : undefined;
+};
+
 // Modal card for one audit entry. Native <dialog>: Esc closes, focus is trapped.
 function DetailsDialog({
     entry: r,
@@ -203,9 +210,16 @@ function DetailsDialog({
                         key={k}
                         k={k}
                         v={
-                            <Mono>
-                                {typeof v === "string" ? v : JSON.stringify(v)}
-                            </Mono>
+                            typeof v === "string" &&
+                            /^0x([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$/.test(v) ? (
+                                <Onchain value={v} chainId={chainOf(d)} />
+                            ) : (
+                                <Mono>
+                                    {typeof v === "string"
+                                        ? v
+                                        : JSON.stringify(v)}
+                                </Mono>
+                            )
                         }
                     />
                 ))}

@@ -6,7 +6,21 @@ import type { AdminSettlement } from "../lib/types";
 import { ErrorText, Hint, signedUsd, TD, TH, toneOf } from "../components/ui";
 
 export function Settlements() {
-    const [all, setAll] = useState(false);
+    const [all, setAllState] = useState(() => {
+        try {
+            return localStorage.getItem("nar.settlements.all") === "1";
+        } catch {
+            return false;
+        }
+    });
+    const setAll = (v: boolean) => {
+        setAllState(v);
+        try {
+            localStorage.setItem("nar.settlements.all", v ? "1" : "0");
+        } catch {
+            /* private mode: just don't remember */
+        }
+    };
     const [open, setOpen] = useState<string | null>(null);
     const q = useQuery({
         queryKey: ["admin-settlements", all],

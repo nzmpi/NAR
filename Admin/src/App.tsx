@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, api, loginUrl } from "./lib/api";
 import type { AdminDeposit, AdminTransfer, AdminWithdrawal } from "./lib/types";
-import { Hint } from "./components/ui";
+import { ErrorBoundary, Hint } from "./components/ui";
 import { Overview } from "./screens/Overview";
 import { Settlement } from "./screens/Settlement";
 import { Withdrawals } from "./screens/Withdrawals";
@@ -83,6 +83,11 @@ export function useCounts() {
     };
 }
 
+const tabFromHash = (): Tab => {
+    const h = location.hash.slice(1);
+    return h in ICON ? (h as Tab) : "overview";
+};
+
 const Logo = ({ size }: { size: number }) => (
     <div
         className="display flex items-center justify-center rounded-full bg-[var(--btn)] font-semibold text-white"
@@ -94,7 +99,16 @@ const Logo = ({ size }: { size: number }) => (
 
 export default function App() {
     const qc = useQueryClient();
-    const [tab, setTab] = useState<Tab>("overview");
+    // The page lives in the URL hash, so a refresh (or back button) keeps it.
+    const [tab, setTabState] = useState<Tab>(tabFromHash);
+    useEffect(() => {
+        const on = () => setTabState(tabFromHash());
+        window.addEventListener("hashchange", on);
+        return () => window.removeEventListener("hashchange", on);
+    }, []);
+    const setTab = (t: Tab) => {
+        location.hash = t;
+    };
     const me = useQuery({
         queryKey: ["admin-me"],
         queryFn: () => api<{ id: string; telegramId: string }>("/admin/me"),
@@ -245,17 +259,19 @@ function Shell({
                             </button>
                         </div>
                     </header>
-                    {tab === "overview" && (
-                        <Overview counts={counts} go={setTab} />
-                    )}
-                    {tab === "users" && <Users />}
-                    {tab === "setup" && <Setup />}
-                    {tab === "deposits" && <Deposits />}
-                    {tab === "transfers" && <Transfers />}
-                    {tab === "withdrawals" && <Withdrawals />}
-                    {tab === "settlement" && <Settlement go={setTab} />}
-                    {tab === "settlements" && <Settlements />}
-                    {tab === "audit" && <Audit />}
+                    <ErrorBoundary key={tab}>
+                        {tab === "overview" && (
+                            <Overview counts={counts} go={setTab} />
+                        )}
+                        {tab === "users" && <Users />}
+                        {tab === "setup" && <Setup />}
+                        {tab === "deposits" && <Deposits />}
+                        {tab === "transfers" && <Transfers />}
+                        {tab === "withdrawals" && <Withdrawals />}
+                        {tab === "settlement" && <Settlement go={setTab} />}
+                        {tab === "settlements" && <Settlements />}
+                        {tab === "audit" && <Audit />}
+                    </ErrorBoundary>
                 </div>
             </main>
         </div>

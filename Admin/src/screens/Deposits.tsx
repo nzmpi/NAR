@@ -10,9 +10,9 @@ import {
     ErrorText,
     Hint,
     Input,
-    Mono,
     Segmented,
     Warn,
+    Onchain,
 } from "../components/ui";
 
 export const NEEDS_ACTION = ["transfer_detected", "ready_to_activate"];
@@ -196,12 +196,12 @@ function DepositRow({ d, nav }: { d: AdminDeposit; nav?: string }) {
             </dl>
             <div className="text-sm">
                 <span className="text-[var(--hint)]">Vault address: </span>
-                <Mono>{d.vaultAddress}</Mono>
+                <Onchain value={d.vaultAddress} chainId={d.chainId} />
             </div>
             {i.sweepTxHash && (
                 <div className="text-sm">
                     <span className="text-[var(--hint)]">Sweep tx: </span>
-                    <Mono>{i.sweepTxHash}</Mono>
+                    <Onchain value={i.sweepTxHash} chainId={d.chainId} />
                 </div>
             )}
             {i.rejectionReason && (
@@ -369,11 +369,11 @@ function BatchPanel({ d }: { d: AdminDeposit }) {
                 <div className="space-y-2 text-sm">
                     <div>
                         Chain <b>{b.chainId}</b> · to{" "}
-                        <Mono>{b.destination}</Mono>
+                        <Onchain value={b.destination} chainId={b.chainId} />
                     </div>
                     {b.tokens.map((t, k) => (
                         <div key={t}>
-                            Token <Mono>{t}</Mono>:{" "}
+                            Token <Onchain value={t} chainId={b.chainId} />:{" "}
                             <b className="tnum">
                                 {formatUnits(b.amounts[k], d.decimals, 6)}
                             </b>{" "}

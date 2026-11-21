@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { bpsPct, fmtUsd, pct } from "../lib/money";
 import type { AdminPerformance, AdminPools } from "../lib/types";
@@ -34,12 +34,17 @@ const Stat = ({
     label,
     value,
     color,
+    stale,
 }: {
     label: string;
     value: string;
     color?: string;
+    stale?: boolean;
 }) => (
-    <div className="flex flex-col gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--card)] p-[18px]">
+    <div
+        aria-busy={stale}
+        className={`flex flex-col gap-1.5 rounded-2xl border border-[var(--line)] bg-[var(--card)] p-[18px] transition-opacity ${stale ? "opacity-50" : ""}`}
+    >
         <div className="text-[13px] text-[var(--hint)]">{label}</div>
         <div className="display text-2xl font-semibold" style={{ color }}>
             {value}
@@ -62,6 +67,9 @@ export function Overview({
     });
     const perf = useQuery({
         queryKey: ["admin-perf", range],
+        // Keep the last range's numbers while the next one loads, so the
+        // cards never vanish and the total card never fills the row.
+        placeholderData: keepPreviousData,
         queryFn: () =>
             api<AdminPerformance>(`/admin/performance?range=${range}`),
     });
@@ -131,23 +139,34 @@ export function Overview({
                         ${fmtUsd(total)}
                     </div>
                 </div>
-                {perf.data && (
-                    <>
-                        <Stat
-                            label={`Participant yield · ${rangeLabel}`}
-                            value={`$${fmtUsd(perf.data.participantYieldUsd)}`}
-                        />
-                        <Stat
-                            label={`Manager excess · ${rangeLabel}`}
-                            value={`$${fmtUsd(perf.data.managerExcessUsd)}`}
-                        />
-                        <Stat
-                            label={`Losses · ${rangeLabel}`}
-                            value={`${loss < 0n ? "−" : ""}$${fmtUsd(loss < 0n ? -loss : loss)}`}
-                            color={toneOf(loss)}
-                        />
-                    </>
-                )}
+                <Stat
+                    label={`Participant yield · ${rangeLabel}`}
+                    value={
+                        perf.data
+                            ? `$${fmtUsd(perf.data.participantYieldUsd)}`
+                            : "–"
+                    }
+                    stale={perf.isPlaceholderData}
+                />
+                <Stat
+                    label={`Manager excess · ${rangeLabel}`}
+                    value={
+                        perf.data
+                            ? `$${fmtUsd(perf.data.managerExcessUsd)}`
+                            : "–"
+                    }
+                    stale={perf.isPlaceholderData}
+                />
+                <Stat
+                    label={`Losses · ${rangeLabel}`}
+                    value={
+                        perf.data
+                            ? `${loss < 0n ? "−" : ""}$${fmtUsd(loss < 0n ? -loss : loss)}`
+                            : "–"
+                    }
+                    color={toneOf(loss)}
+                    stale={perf.isPlaceholderData}
+                />
             </section>
             <ErrorText error={perf.error} />
 
