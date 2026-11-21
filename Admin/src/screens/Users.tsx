@@ -32,29 +32,24 @@ const STATUS = [
 ] as const;
 type Status = (typeof STATUS)[number]["id"];
 type VaultFilter = "any" | "0" | "1" | "2" | "full";
+type BalanceFilter = "any" | "some" | "zero";
 const name = (u: AdminUser) => (u.username ? `@${u.username}` : u.telegramId);
 
 export function Users() {
     const [search, setSearch] = useState("");
     const [status, setStatus] = useState<Status>("all");
     const [vf, setVf] = useState<VaultFilter>("any");
+    const [bf, setBf] = useState<BalanceFilter>("any");
     const [open, setOpen] = useState<string | null>(null);
     const q = useQuery({
         queryKey: ["admin-users"],
         queryFn: () => api<AdminUser[]>("/admin/users"),
     });
-    const vaults = useQuery({
-        queryKey: ["admin-vaults", "all"],
-        queryFn: () => api<AdminVault[]>("/admin/vaults"),
-    });
-    const vaultCount = new Map<string, number>();
-    for (const v of vaults.data ?? [])
-        vaultCount.set(v.userId, (vaultCount.get(v.userId) ?? 0) + 1);
 
     const users = q.data ?? [];
     const s = search.trim().toLowerCase().replace(/^@/, "");
     const okVaults = (u: AdminUser) => {
-        const n = vaultCount.get(u.id) ?? 0;
+        const n = u.vaultCount;
         if (vf === "any") return true;
         if (vf === "full") return n >= u.maxVaults;
         if (vf === "2") return n >= 2;
@@ -67,9 +62,10 @@ export function Users() {
                 (u.username ?? "").toLowerCase().includes(s) ||
                 u.id.startsWith(s)) &&
             (status === "all" || (status === "blocked") === u.isBlocked) &&
-            okVaults(u),
+            okVaults(u) &&
+            (bf === "any" || (bf === "zero") === (BigInt(u.balanceUsd) === 0n)),
     );
-    const filtered = status !== "all" || vf !== "any";
+    const filtered = status !== "all" || vf !== "any" || bf !== "any";
     const sel = users.find((u) => u.id === open);
 
     return (
@@ -122,11 +118,24 @@ export function Users() {
                                 <option value="2">2+ vaults</option>
                                 <option value="full">At vault limit</option>
                             </Select>
+                            <Select
+                                aria-label="Balance"
+                                value={bf}
+                                onChange={(e) =>
+                                    setBf(e.target.value as BalanceFilter)
+                                }
+                                className="!h-[38px] text-[13px] font-medium"
+                            >
+                                <option value="any">Any balance</option>
+                                <option value="some">Has balance</option>
+                                <option value="zero">Zero balance</option>
+                            </Select>
                             {filtered && (
                                 <button
                                     onClick={() => {
                                         setStatus("all");
                                         setVf("any");
+                                        setBf("any");
                                     }}
                                     className="h-[38px] cursor-pointer rounded-full px-3 text-[13px] font-semibold text-[var(--link)]"
                                 >
@@ -141,14 +150,17 @@ export function Users() {
                         </div>
                     )}
                     <div className="px-5">
-                        <ErrorText error={q.error || vaults.error} />
+                        <ErrorText error={q.error} />
                     </div>
                     <div className="overflow-x-auto">
-                        <table className="w-full min-w-[480px] border-collapse">
+                        <table className="w-full min-w-[560px] border-collapse">
                             <thead>
                                 <tr>
                                     <th className={TH}>User</th>
                                     <th className={TH}>Joined</th>
+                                    <th className={`${TH} text-right`}>
+                                        Balance
+                                    </th>
                                     <th className={`${TH} text-right`}>
                                         Vaults
                                     </th>
@@ -181,10 +193,13 @@ export function Users() {
                                                 u.createdAt,
                                             ).toLocaleDateString()}
                                         </td>
+                                        <td
+                                            className={`${TD} text-right font-medium`}
+                                        >
+                                            ${fmtUsd(u.balanceUsd)}
+                                        </td>
                                         <td className={`${TD} text-right`}>
-                                            {vaults.data
-                                                ? `${vaultCount.get(u.id) ?? 0} / ${u.maxVaults}`
-                                                : `– / ${u.maxVaults}`}
+                                            {u.vaultCount} / {u.maxVaults}
                                         </td>
                                         <td className={TD}>
                                             <Pill
@@ -202,7 +217,7 @@ export function Users() {
                                 {!q.isLoading && rows.length === 0 && (
                                     <tr className="border-t border-[var(--row)]">
                                         <td
-                                            colSpan={4}
+                                            colSpan={5}
                                             className="px-4 py-7 text-center text-[var(--hint)]"
                                         >
                                             No users match these filters.
@@ -362,8 +377,10 @@ function UserDetail({ u }: { u: AdminUser }) {
     const addVault = useAction({
         mutationFn: (_, key) =>
             api(`/admin/users/${u.id}/vaults`, { method: "POST", key }),
-        // Prefix match also refreshes the vault counts in the list.
-        onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-vaults"] }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["admin-vaults", u.id] });
+            qc.invalidateQueries({ queryKey: ["admin-users"] }); // vault count
+        },
     });
     const H =
         "mb-2 text-xs font-semibold tracking-wider text-[var(--hint)] uppercase";

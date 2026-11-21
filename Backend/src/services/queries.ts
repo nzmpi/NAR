@@ -310,12 +310,52 @@ export function adminListWithdrawals(database: Database, status?: string) {
         .limit(LIMIT);
 }
 
-export function adminListUsers(database: Database) {
-    return database
+// Users with their current balance (same valuation as getPortfolio) and
+// active vault count, so the admin list can filter without a call per user.
+export async function adminListUsers(database: Database) {
+    const list = await database
         .select()
         .from(users)
         .orderBy(desc(users.createdAt))
         .limit(LIMIT);
+    if (list.length === 0) return [];
+    const ids = list.map((u) => u.id);
+    const { state, keyById } = await readPools(database);
+    const lots = await database
+        .select({
+            userId: positionLots.userId,
+            poolId: positionLots.poolId,
+            shares: positionLots.shares,
+        })
+        .from(positionLots)
+        .where(
+            and(
+                inArray(positionLots.userId, ids),
+                isNull(positionLots.closedAt),
+            ),
+        );
+    const balance = new Map<string, bigint>();
+    for (const l of lots) {
+        const key = keyById.get(l.poolId)!;
+        if (key === "manager") continue; // manager pool is admin-only
+        balance.set(
+            l.userId,
+            (balance.get(l.userId) ?? 0n) +
+                valueOfShares(state[key], BigInt(l.shares)),
+        );
+    }
+    const vaultRows = await database
+        .select({ userId: vaults.userId })
+        .from(vaults)
+        .where(and(inArray(vaults.userId, ids), eq(vaults.isActive, true)));
+    const vaultCount = new Map<string, number>();
+    for (const v of vaultRows)
+        vaultCount.set(v.userId, (vaultCount.get(v.userId) ?? 0) + 1);
+    return list.map((u) => ({
+        ...u,
+        balanceUsd: balance.get(u.id) ?? 0n,
+        vaultCount: vaultCount.get(u.id) ?? 0,
+    }));
 }
 
 export async function adminListSettlements(
