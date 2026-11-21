@@ -115,6 +115,7 @@ export interface WithdrawalRow {
     status: string;
     rejectionReason: string | null;
     txHash: string | null;
+    lockedAt: string | null;
     createdAt: string;
 }
 export interface RelockRow {

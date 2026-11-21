@@ -71,6 +71,13 @@
       "when": 1795129656435,
       "tag": "0009_admin_session_revocation",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1795286802330,
+      "tag": "0010_withdrawal_lock",
+      "breakpoints": true
     }
   ]
 }
