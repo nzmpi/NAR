@@ -329,7 +329,7 @@ async function releaseReservation(tx: Tx, withdrawalId: string) {
             .where(eq(positionLots.id, a.positionLotId));
 }
 
-// User can cancel only while pending.
+// User can cancel only while pending and not locked by the admin.
 export function cancelWithdrawal(
     database: Database,
     i: { withdrawalId: string; userId: string },
@@ -352,11 +352,47 @@ export function cancelWithdrawal(
                 409,
                 "bad_state",
             );
+        if (w.lockedAt)
+            throw new AppError(
+                "The payout is being processed and can no longer be cancelled",
+                409,
+                "locked",
+            );
         await releaseReservation(tx, w.id);
         await tx
             .update(withdrawals)
             .set({ status: "cancelled", updatedAt: new Date() })
             .where(eq(withdrawals.id, w.id));
+    });
+}
+
+// Admin locks a pending withdrawal before sending funds, so the user cannot
+// cancel between the payout and markWithdrawalPaid. Idempotent.
+export function lockWithdrawal(
+    database: Database,
+    i: { withdrawalId: string; adminId: string },
+) {
+    return database.transaction(async (tx) => {
+        const [w] = await tx
+            .select()
+            .from(withdrawals)
+            .where(eq(withdrawals.id, i.withdrawalId))
+            .for("update");
+        if (!w) throw new AppError("Withdrawal not found", 404, "not_found");
+        if (w.status !== "pending")
+            throw new AppError("Withdrawal is not pending", 409, "bad_state");
+        if (w.lockedAt) return;
+        const now = new Date();
+        await tx
+            .update(withdrawals)
+            .set({ lockedAt: now, updatedAt: now })
+            .where(eq(withdrawals.id, w.id));
+        await tx.insert(auditLogs).values({
+            adminId: i.adminId,
+            action: "withdrawal.locked",
+            entityType: "withdrawal",
+            entityId: w.id,
+        });
     });
 }
 

@@ -414,7 +414,13 @@ function WithdrawalList({
                                     {w.rejectionReason}
                                 </div>
                             )}
-                            {w.status === "pending" && (
+                            {w.status === "pending" && w.lockedAt && (
+                                <div className="text-xs text-[var(--hint)]">
+                                    Payout in progress. It can no longer be
+                                    cancelled.
+                                </div>
+                            )}
+                            {w.status === "pending" && !w.lockedAt && (
                                 <Button
                                     variant="danger"
                                     className="w-full !py-2"

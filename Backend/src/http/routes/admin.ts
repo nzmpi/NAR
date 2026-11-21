@@ -29,6 +29,7 @@ import {
 } from "../../services/transferScanner.js";
 import { settleManual } from "../../services/settlement.js";
 import {
+    lockWithdrawal,
     markWithdrawalPaid,
     rejectWithdrawal,
 } from "../../services/withdrawals.js";
@@ -300,6 +301,19 @@ export async function adminRoutes(app: FastifyInstance) {
     /* withdrawals */
     app.get("/admin/withdrawals", auth, async (req) =>
         adminListWithdrawals(db, statusQuery.parse(req.query).status),
+    );
+
+    app.post(
+        "/admin/withdrawals/:id/lock",
+        auth,
+        once(204, async (req) => {
+            const { id } = idParam.parse(req.params);
+            await lockWithdrawal(db, {
+                withdrawalId: id,
+                adminId: req.admin!.id,
+            });
+            return null;
+        }),
     );
 
     app.post(

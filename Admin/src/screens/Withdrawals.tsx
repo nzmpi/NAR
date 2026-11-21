@@ -86,6 +86,14 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
             }),
         onSuccess: done,
     });
+    const lock = useAction({
+        mutationFn: (_, key) =>
+            api("/admin/withdrawals/" + w.id + "/lock", {
+                method: "POST",
+                key,
+            }),
+        onSuccess: done,
+    });
     const reject = useAction({
         mutationFn: (_, key) =>
             api("/admin/withdrawals/" + w.id + "/reject", {
@@ -149,14 +157,32 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
                 </div>
             )}
 
+            {w.status === "pending" && w.lockedAt && (
+                <Hint>
+                    Locked: the user can no longer cancel. Send the funds, then
+                    mark it paid.
+                </Hint>
+            )}
             {w.status === "pending" && mode === "" && (
                 <div className="flex flex-wrap gap-2">
-                    <Button onClick={() => setMode("pay")}>Mark paid…</Button>
+                    {w.lockedAt ? (
+                        <Button onClick={() => setMode("pay")}>
+                            Mark paid…
+                        </Button>
+                    ) : (
+                        <Button
+                            disabled={lock.isPending}
+                            onClick={() => lock.mutate()}
+                        >
+                            Lock for payout
+                        </Button>
+                    )}
                     <Button variant="danger" onClick={() => setMode("reject")}>
                         Reject…
                     </Button>
                 </div>
             )}
+            <ErrorText error={lock.error} />
             {mode === "pay" && (
                 <div className="space-y-3 rounded-xl border border-[var(--line)] bg-[var(--bg)] p-4">
                     <Hint>

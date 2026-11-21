@@ -441,6 +441,8 @@ export const withdrawals = pgTable(
         ),
         processedAt: timestamp("processed_at", { withTimezone: true }),
         txHash: text("tx_hash"),
+        // Set by the admin before sending funds; the user can no longer cancel.
+        lockedAt: timestamp("locked_at", { withTimezone: true }),
         createdAt: createdAt(),
         updatedAt: updatedAt(),
     },

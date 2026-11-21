@@ -3,6 +3,7 @@ import { settleManual } from "../src/services/settlement.js";
 import {
     MIN_WITHDRAWAL_USD,
     cancelWithdrawal,
+    lockWithdrawal,
     markWithdrawalPaid,
     previewWithdrawal,
     rejectWithdrawal,
@@ -99,6 +100,21 @@ ok(
         0n,
     "cancel releases reservation",
 );
+
+// Locked by the admin: the user cannot cancel, the admin can still reject
+const wl = await requestWithdrawal(db, req(alice.id, 100n * U));
+await lockWithdrawal(db, { withdrawalId: wl.withdrawalId, adminId: admin.id });
+await lockWithdrawal(db, { withdrawalId: wl.withdrawalId, adminId: admin.id });
+await rejects(
+    cancelWithdrawal(db, { withdrawalId: wl.withdrawalId, userId: alice.id }),
+    "locked withdrawal cannot be cancelled",
+);
+await rejectWithdrawal(db, {
+    withdrawalId: wl.withdrawalId,
+    adminId: admin.id,
+    reason: "test",
+});
+ok((await status(wl.withdrawalId)) === "rejected", "locked can be rejected");
 
 // Admin reject releases too
 const wb = await requestWithdrawal(db, req(bob.id, 100n * U));
