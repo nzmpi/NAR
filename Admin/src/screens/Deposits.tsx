@@ -11,10 +11,13 @@ import {
     Hint,
     Input,
     Mono,
+    Segmented,
+    Warn,
 } from "../components/ui";
 
+export const NEEDS_ACTION = ["transfer_detected", "ready_to_activate"];
 const GROUPS = {
-    "needs action": ["transfer_detected", "ready_to_activate"],
+    "needs action": NEEDS_ACTION,
     waiting: ["intent", "awaiting_user_approval"],
     done: ["swept_and_confirmed"],
     closed: ["rejected", "expired", "cancelled"],
@@ -60,22 +63,19 @@ export function Deposits() {
     return (
         <div className="space-y-4">
             <CheckVaults />
-            <div className="flex flex-wrap gap-1">
-                {(Object.keys(GROUPS) as Group[]).map((g) => (
-                    <button
-                        key={g}
-                        onClick={() => setGroup(g)}
-                        className={`rounded-full px-3 py-1 text-sm ${g === group ? "bg-[var(--btn)] text-[var(--btn-fg)]" : "text-[var(--hint)]"}`}
-                    >
-                        {g}{" "}
-                        {g !== "all" && (
-                            <span className="opacity-70">
-                                ({all.filter((d) => inGroup(d, g)).length})
-                            </span>
-                        )}
-                    </button>
-                ))}
-            </div>
+            <Segmented
+                label="Deposit status"
+                value={group}
+                onChange={setGroup}
+                options={(Object.keys(GROUPS) as Group[]).map((g) => ({
+                    id: g,
+                    label: g[0].toUpperCase() + g.slice(1),
+                    count:
+                        g === "all"
+                            ? undefined
+                            : all.filter((d) => inGroup(d, g)).length,
+                }))}
+            />
             {q.isLoading && <Hint>Loading…</Hint>}
             <ErrorText error={q.error} />
             {!q.isLoading && rows.length === 0 && <Hint>Nothing here.</Hint>}
@@ -113,7 +113,7 @@ function CheckVaults() {
     });
     return (
         <Card className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
                 <Hint>
                     Reads every vault's balance. Vaults that hold tokens are
                     scanned for new deposits.
@@ -159,23 +159,24 @@ function DepositRow({ d, nav }: { d: AdminDeposit; nav?: string }) {
     ].includes(i.status);
 
     return (
-        <Card className="space-y-2">
-            <div className="flex items-center justify-between">
-                <div className="font-medium">
-                    {who}{" "}
-                    <span className="text-sm font-normal text-[var(--hint)]">
-                        · {new Date(i.createdAt).toLocaleString()}
-                    </span>
+        <Card className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                    <div className="font-semibold">{who}</div>
+                    <div className="text-xs text-[var(--hint)]">
+                        {new Date(i.createdAt).toLocaleString()}
+                    </div>
                 </div>
                 <Badge status={i.status} />
             </div>
-            <dl className="grid grid-cols-2 gap-2 text-sm tnum sm:grid-cols-4">
+            <Steps status={i.status} />
+            <dl className="grid grid-cols-2 gap-3 text-sm tnum sm:grid-cols-4">
                 <div>
-                    <dt className="text-[var(--hint)]">Intended</dt>
+                    <dt className="text-xs text-[var(--hint)]">Intended</dt>
                     <dd>{intended}</dd>
                 </div>
                 <div>
-                    <dt className="text-[var(--hint)]">Confirmed</dt>
+                    <dt className="text-xs text-[var(--hint)]">Confirmed</dt>
                     <dd>
                         {i.confirmedAmount
                             ? `${formatUnits(i.confirmedAmount, d.decimals, 2)} ${d.symbol}`
@@ -185,11 +186,11 @@ function DepositRow({ d, nav }: { d: AdminDeposit; nav?: string }) {
                     </dd>
                 </div>
                 <div>
-                    <dt className="text-[var(--hint)]">Vault</dt>
+                    <dt className="text-xs text-[var(--hint)]">Vault</dt>
                     <dd>{d.vaultDeployed ? "deployed" : "not deployed"}</dd>
                 </div>
                 <div>
-                    <dt className="text-[var(--hint)]">Expires</dt>
+                    <dt className="text-xs text-[var(--hint)]">Expires</dt>
                     <dd>{new Date(i.expiresAt).toLocaleString()}</dd>
                 </div>
             </dl>
@@ -265,6 +266,44 @@ function DepositRow({ d, nav }: { d: AdminDeposit; nav?: string }) {
     );
 }
 
+const STEPS = ["Intent", "Transfer detected", "Swept", "Active"];
+const STEP_OF: Record<string, number> = {
+    intent: 0,
+    transfer_detected: 1,
+    awaiting_user_approval: 1,
+    ready_to_activate: 2,
+    swept_and_confirmed: 3,
+};
+
+// Where a deposit is in its life: intent -> transfer -> sweep -> active.
+function Steps({ status }: { status: string }) {
+    const at = STEP_OF[status];
+    if (at === undefined) return null; // closed deposits have no progress
+    return (
+        <ol className="grid grid-cols-4 gap-2" aria-label="Progress">
+            {STEPS.map((label, k) => (
+                <li
+                    key={label}
+                    aria-current={k === at ? "step" : undefined}
+                    className="flex flex-col gap-1.5"
+                >
+                    <div
+                        className="h-1.5 rounded-full"
+                        style={{
+                            background: k <= at ? "var(--btn)" : "var(--track)",
+                        }}
+                    />
+                    <span
+                        className={`text-xs ${k === at ? "font-semibold text-[var(--fg)]" : "text-[var(--hint)]"}`}
+                    >
+                        {label}
+                    </span>
+                </li>
+            ))}
+        </ol>
+    );
+}
+
 function BatchPanel({ d }: { d: AdminDeposit }) {
     const [to, setTo] = useState(lsGet("nar.treasury"));
     const [native, setNative] = useState(false);
@@ -296,7 +335,7 @@ function BatchPanel({ d }: { d: AdminDeposit }) {
         URL.revokeObjectURL(url);
     };
     return (
-        <div className="space-y-2 rounded-lg border border-[var(--line)] p-3">
+        <div className="space-y-3 rounded-xl border border-[var(--line)] bg-[var(--bg)] p-4">
             <Hint>
                 Builds a Safe Transaction Builder batch that sweeps the vault's
                 full {d.symbol} balance to your treasury address. An undeployed
@@ -346,10 +385,10 @@ function BatchPanel({ d }: { d: AdminDeposit }) {
                             <li key={k}>{t.description}</li>
                         ))}
                     </ul>
-                    <p className="text-[var(--warn)]">
+                    <Warn>
                         Signers: verify the destination and amounts in the Safe
                         UI before executing.
-                    </p>
+                    </Warn>
                     <div className="flex gap-2">
                         <Button onClick={download}>Download JSON</Button>
                         <Button
@@ -386,7 +425,7 @@ function SweepPanel({ d, onDone }: { d: AdminDeposit; onDone: () => void }) {
         onSuccess: onDone,
     });
     return (
-        <div className="space-y-2 rounded-lg border border-[var(--line)] p-3">
+        <div className="space-y-3 rounded-xl border border-[var(--line)] bg-[var(--bg)] p-4">
             <Hint>
                 The server re-checks the transfer and the sweep transaction
                 onchain. Leave the amount empty to use the detected amount.
@@ -443,7 +482,7 @@ function ActivatePanel({
         onSuccess: onDone,
     });
     return (
-        <div className="space-y-2 rounded-lg border border-[var(--line)] p-3">
+        <div className="space-y-3 rounded-xl border border-[var(--line)] bg-[var(--bg)] p-4">
             <Hint>
                 Enter the current total USD value of all managed funds{" "}
                 <b>before</b> this deposit. A settlement runs first, then the
@@ -481,7 +520,7 @@ function RejectPanel({ d, onDone }: { d: AdminDeposit; onDone: () => void }) {
         onSuccess: onDone,
     });
     return (
-        <div className="space-y-2 rounded-lg border border-[var(--line)] p-3">
+        <div className="space-y-3 rounded-xl border border-[var(--line)] bg-[var(--bg)] p-4">
             <Input
                 placeholder="Reason"
                 value={reason}

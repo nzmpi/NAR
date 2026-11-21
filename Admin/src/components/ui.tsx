@@ -1,4 +1,9 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type {
+    ButtonHTMLAttributes,
+    InputHTMLAttributes,
+    ReactNode,
+    SelectHTMLAttributes,
+} from "react";
 
 export const Card = ({
     children,
@@ -8,7 +13,49 @@ export const Card = ({
     className?: string;
 }) => (
     <div
-        className={`rounded-xl border border-[var(--line)] bg-[var(--bg2)] p-4 ${className}`}
+        className={`rounded-2xl border border-[var(--line)] bg-[var(--card)] p-5 ${className}`}
+    >
+        {children}
+    </div>
+);
+// Card with a header row and edge-to-edge body (tables, lists).
+export const Panel = ({
+    title,
+    right,
+    children,
+    className = "",
+}: {
+    title?: ReactNode;
+    right?: ReactNode;
+    children: ReactNode;
+    className?: string;
+}) => (
+    <section
+        className={`overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--card)] ${className}`}
+    >
+        {(title || right) && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] px-5 py-4">
+                {title && (
+                    <h2 className="display text-[17px] font-semibold">
+                        {title}
+                    </h2>
+                )}
+                {right}
+            </div>
+        )}
+        {children}
+    </section>
+);
+// Inline form area inside a card.
+export const Sub = ({
+    children,
+    className = "",
+}: {
+    children: ReactNode;
+    className?: string;
+}) => (
+    <div
+        className={`space-y-3 rounded-xl border border-[var(--line)] bg-[var(--bg)] p-4 ${className}`}
     >
         {children}
     </div>
@@ -16,56 +63,155 @@ export const Card = ({
 export const Hint = ({ children }: { children: ReactNode }) => (
     <p className="text-sm text-[var(--hint)]">{children}</p>
 );
+export const Warn = ({ children }: { children: ReactNode }) => (
+    <p className="rounded-xl bg-[var(--warn-soft)] px-3 py-2.5 text-sm font-medium text-[var(--warn)]">
+        {children}
+    </p>
+);
 
 export function Button({
     variant = "primary",
+    size = "md",
     className = "",
     ...p
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
     variant?: "primary" | "ghost" | "danger";
+    size?: "sm" | "md";
 }) {
     const v = {
-        primary: "bg-[var(--btn)] text-[var(--btn-fg)]",
-        ghost: "border border-[var(--line)]",
-        danger: "border border-[var(--bad)] text-[var(--bad)]",
+        primary: "bg-[var(--btn)] text-[var(--btn-fg)] font-semibold",
+        ghost: "border border-[var(--line)] bg-[var(--card)] font-medium hover:bg-[var(--hover)]",
+        danger: "border border-[var(--bad)] text-[var(--bad)] font-semibold hover:bg-[var(--bad-soft)]",
     }[variant];
+    const s =
+        size === "sm" ? "h-8 px-3.5 text-[13px]" : "h-10 px-4 text-[13px]";
     return (
         <button
             {...p}
-            className={`rounded-lg px-3 py-2 text-sm font-medium disabled:opacity-50 ${v} ${className}`}
+            className={`inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-full disabled:cursor-not-allowed disabled:opacity-50 ${s} ${v} ${className}`}
         />
     );
 }
-export const Input = (p: React.InputHTMLAttributes<HTMLInputElement>) => (
-    <input
-        {...p}
-        className={`w-full rounded-lg border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-sm ${p.className ?? ""}`}
-    />
+const field =
+    "h-10 rounded-[10px] border border-[var(--line)] bg-[var(--field)] px-3 text-sm";
+export const Input = (p: InputHTMLAttributes<HTMLInputElement>) => (
+    <input {...p} className={`w-full ${field} ${p.className ?? ""}`} />
+);
+export const Select = (p: SelectHTMLAttributes<HTMLSelectElement>) => (
+    <select {...p} className={`${field} ${p.className ?? ""}`} />
+);
+export const Field = ({
+    label,
+    children,
+    className = "",
+}: {
+    label: ReactNode;
+    children: ReactNode;
+    className?: string;
+}) => (
+    <label className={`flex flex-col gap-1.5 text-sm ${className}`}>
+        <span className="text-xs text-[var(--hint)]">{label}</span>
+        {children}
+    </label>
 );
 export const ErrorText = ({ error }: { error: unknown }) =>
     error ? (
-        <p className="text-sm text-[var(--bad)]">
+        <p role="alert" className="text-sm text-[var(--bad)]">
             {error instanceof Error ? error.message : "Error"}
         </p>
     ) : null;
 
-const COLORS: Record<string, string> = {
-    pending: "var(--warn)",
-    paid: "var(--good)",
-    rejected: "var(--bad)",
-    cancelled: "var(--hint)",
+const TONE = {
+    good: "bg-[var(--good-soft)] text-[var(--good)]",
+    bad: "bg-[var(--bad-soft)] text-[var(--bad)]",
+    warn: "bg-[var(--warn-soft)] text-[var(--warn)]",
+    accent: "bg-[var(--accent-soft)] text-[var(--accent-ink)]",
+    muted: "bg-[var(--muted-soft)] text-[var(--soft)]",
 };
+export type Tone = keyof typeof TONE;
+const STATUS_TONE: Record<string, Tone> = {
+    pending: "warn",
+    intent: "muted",
+    transfer_detected: "warn",
+    awaiting_user_approval: "accent",
+    ready_to_activate: "warn",
+    swept_and_confirmed: "good",
+    paid: "good",
+    active: "good",
+    deployed: "good",
+    rejected: "bad",
+    blocked: "bad",
+};
+export const Pill = ({
+    tone,
+    children,
+}: {
+    tone: Tone;
+    children: ReactNode;
+}) => (
+    <span
+        className={`inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${TONE[tone]}`}
+    >
+        {children}
+    </span>
+);
 export const Badge = ({ status }: { status: string }) => {
-    const c = COLORS[status] ?? "var(--hint)";
+    const label = status.replaceAll("_", " ");
     return (
-        <span
-            className="rounded-full px-2 py-0.5 text-xs"
-            style={{ color: c, border: `1px solid ${c}` }}
-        >
-            {status}
-        </span>
+        <Pill tone={STATUS_TONE[status] ?? "muted"}>
+            {label[0].toUpperCase() + label.slice(1)}
+        </Pill>
     );
 };
 export const Mono = ({ children }: { children: ReactNode }) => (
     <span className="font-mono text-xs break-all">{children}</span>
 );
+
+// Pill-shaped tab group. Counts show next to the label.
+export function Segmented<T extends string>({
+    options,
+    value,
+    onChange,
+    label,
+}: {
+    options: readonly { id: T; label: string; count?: number }[];
+    value: T;
+    onChange: (v: T) => void;
+    label: string;
+}) {
+    return (
+        <div
+            role="group"
+            aria-label={label}
+            className="inline-flex flex-wrap gap-0.5 rounded-full bg-[var(--seg)] p-[3px]"
+        >
+            {options.map((o) => {
+                const on = o.id === value;
+                return (
+                    <button
+                        key={o.id}
+                        aria-pressed={on}
+                        onClick={() => onChange(o.id)}
+                        className={`h-8 cursor-pointer rounded-full px-3.5 text-[13px] ${on ? "bg-[var(--seg-on)] font-semibold text-[var(--fg)] shadow-sm" : "font-medium text-[var(--soft)]"}`}
+                    >
+                        {o.label}
+                        {o.count !== undefined && (
+                            <span className="ml-1.5 tnum opacity-70">
+                                {o.count}
+                            </span>
+                        )}
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+export const TH =
+    "px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-[var(--hint)] first:pl-5 last:pr-5";
+export const TD = "px-3 py-3 first:pl-5 last:pr-5";
+
+export const signedUsd = (v: bigint, fmt: (x: bigint) => string) =>
+    `${v > 0n ? "+" : v < 0n ? "−" : ""}$${fmt(v < 0n ? -v : v)}`;
+export const toneOf = (v: bigint) =>
+    v > 0n ? "var(--good)" : v < 0n ? "var(--bad)" : undefined;

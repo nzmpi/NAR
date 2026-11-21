@@ -2,7 +2,26 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import type { AuditEntry } from "../lib/types";
-import { ErrorText, Hint, Input, Mono } from "../components/ui";
+import {
+    ErrorText,
+    Hint,
+    Input,
+    Mono,
+    Pill,
+    TD,
+    TH,
+    type Tone,
+} from "../components/ui";
+
+// Color only hints at the outcome; the action text stays the source of truth.
+const toneFor = (a: string): Tone =>
+    /reject|block|remove|disable|cancel/.test(a)
+        ? "bad"
+        : /paid|activat|sweep|deploy|unblock|enable/.test(a)
+          ? "good"
+          : /settle/.test(a)
+            ? "accent"
+            : "muted";
 
 export function Audit() {
     const [search, setSearch] = useState("");
@@ -24,39 +43,61 @@ export function Audit() {
     );
 
     return (
-        <div className="space-y-3">
-            <Input
-                placeholder="Filter by action, entity or details (e.g. withdrawal, vault, a tx hash)"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-            />
-            <Hint>Latest 200 admin actions. {rows.length} shown.</Hint>
-            {q.isLoading && <Hint>Loading…</Hint>}
-            <ErrorText error={q.error} />
+        <section className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--card)]">
+            <div className="flex flex-wrap items-center gap-2.5 border-b border-[var(--line)] p-4">
+                <Input
+                    aria-label="Filter"
+                    placeholder="Filter by action, entity or details (e.g. withdrawal, vault, a tx hash)"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="min-w-0 flex-[1_1_320px] !rounded-full px-4"
+                />
+                <span className="text-[13px] text-[var(--hint)]">
+                    Latest 200 admin actions · {rows.length} shown
+                </span>
+            </div>
+            {q.isLoading && (
+                <div className="p-5">
+                    <Hint>Loading…</Hint>
+                </div>
+            )}
+            <div className="px-5">
+                <ErrorText error={q.error} />
+            </div>
             <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                    <thead className="text-left text-[var(--hint)]">
+                <table className="w-full min-w-[760px] border-collapse">
+                    <thead>
                         <tr>
-                            <th className="py-1">Time</th>
-                            <th>Admin</th>
-                            <th>Action</th>
-                            <th>Entity</th>
-                            <th>Details</th>
+                            <th className={TH}>Time</th>
+                            <th className={TH}>Admin</th>
+                            <th className={TH}>Action</th>
+                            <th className={TH}>Entity</th>
+                            <th className={TH}>Details</th>
                         </tr>
                     </thead>
                     <tbody>
                         {rows.map((r) => (
                             <tr
                                 key={r.id}
-                                className="border-t border-[var(--line)] align-top"
+                                className="border-t border-[var(--row)] align-top"
                             >
-                                <td className="whitespace-nowrap py-2 pr-3">
+                                <td
+                                    className={`${TD} whitespace-nowrap text-[var(--soft)] tnum`}
+                                >
                                     {new Date(r.createdAt).toLocaleString()}
                                 </td>
-                                <td className="pr-3">{r.adminTelegramId}</td>
-                                <td className="pr-3 font-medium">{r.action}</td>
-                                <td className="pr-3">
-                                    {r.entityType}
+                                <td className={`${TD} whitespace-nowrap`}>
+                                    tg {r.adminTelegramId}
+                                </td>
+                                <td className={TD}>
+                                    <Pill tone={toneFor(r.action)}>
+                                        {r.action}
+                                    </Pill>
+                                </td>
+                                <td className={`${TD} whitespace-nowrap`}>
+                                    <span className="text-[var(--soft)]">
+                                        {r.entityType}
+                                    </span>
                                     {r.entityId && (
                                         <>
                                             {" "}
@@ -66,10 +107,10 @@ export function Audit() {
                                         </>
                                     )}
                                 </td>
-                                <td>
+                                <td className={TD}>
                                     {r.details ? (
                                         <details>
-                                            <summary className="cursor-pointer text-[var(--link,var(--btn))]">
+                                            <summary className="cursor-pointer font-medium text-[var(--link)]">
                                                 view
                                             </summary>
                                             <pre className="mt-1 max-w-md whitespace-pre-wrap break-all text-xs">
@@ -89,6 +130,6 @@ export function Audit() {
                     </tbody>
                 </table>
             </div>
-        </div>
+        </section>
     );
 }
