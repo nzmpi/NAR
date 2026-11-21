@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { and, eq } from "drizzle-orm";
 import { db } from "../../db/index.js";
+import { admins } from "../../db/schema.js";
 import { requireUser } from "../auth.js";
 import { idempotent } from "../idempotency.js";
 import {
@@ -90,7 +92,21 @@ export async function userRoutes(app: FastifyInstance) {
     const write = { preHandler: [requireUser, userLimit("write", 20)] };
     const chain = { preHandler: [requireUser, userLimit("chain", 6)] }; // RPC-hitting
 
-    app.get("/me", auth, async (req) => req.user);
+    // isAdmin unlocks the manager pool in the deposit form; the deposit
+    // service checks the same thing again.
+    app.get("/me", auth, async (req) => {
+        const [adm] = await db
+            .select({ id: admins.id })
+            .from(admins)
+            .where(
+                and(
+                    eq(admins.telegramId, req.user!.telegramId),
+                    eq(admins.isActive, true),
+                ),
+            )
+            .limit(1);
+        return { ...req.user, isAdmin: !!adm };
+    });
     app.get("/assets", auth, async () => listAssets(db));
     app.get("/me/vaults", auth, async (req) => {
         await ensureVaults(db, req.user!.id);

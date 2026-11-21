@@ -43,9 +43,12 @@ export function Withdraw() {
         return <ErrorText error={pf.error || assets.error} />;
 
     const lots = pf.data!.lots;
-    const liquid = lots
-        .filter((l) => l.pool === "liquid")
-        .reduce((s, l) => s + avail(l), 0n);
+    const manager = BigInt(pf.data!.managerAvailableUsd);
+    // Fee-free now: liquid plus manager funds (admins only).
+    const liquid =
+        lots
+            .filter((l) => l.pool === "liquid")
+            .reduce((s, l) => s + avail(l), 0n) + manager;
     const lockLots = lots
         .filter((l) => l.pool !== "liquid" && avail(l) > 0n)
         .sort(
@@ -146,7 +149,8 @@ export function Withdraw() {
             <Card className="space-y-3">
                 <h2 className="font-medium">Withdraw</h2>
                 <Hint>
-                    Available now: ${fmtUsd(liquid)} liquid
+                    Available now: ${fmtUsd(liquid)}{" "}
+                    {manager > 0n ? "liquid and manager" : "liquid"}
                     {lockLots.length > 0 && " + locked positions"}.
                 </Hint>
 
