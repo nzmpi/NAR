@@ -62,20 +62,22 @@ export function Deposits() {
 
     return (
         <div className="space-y-4">
-            <CheckVaults />
-            <Segmented
-                label="Deposit status"
-                value={group}
-                onChange={setGroup}
-                options={(Object.keys(GROUPS) as Group[]).map((g) => ({
-                    id: g,
-                    label: g[0].toUpperCase() + g.slice(1),
-                    count:
-                        g === "all"
-                            ? undefined
-                            : all.filter((d) => inGroup(d, g)).length,
-                }))}
-            />
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <Segmented
+                    label="Deposit status"
+                    value={group}
+                    onChange={setGroup}
+                    options={(Object.keys(GROUPS) as Group[]).map((g) => ({
+                        id: g,
+                        label: g[0].toUpperCase() + g.slice(1),
+                        count:
+                            g === "all"
+                                ? undefined
+                                : all.filter((d) => inGroup(d, g)).length,
+                    }))}
+                />
+                <CheckVaults />
+            </div>
             {q.isLoading && <Hint>Loading…</Hint>}
             <ErrorText error={q.error} />
             {!q.isLoading && rows.length === 0 && <Hint>Nothing here.</Hint>}
@@ -112,18 +114,16 @@ function CheckVaults() {
         },
     });
     return (
-        <Card className="space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <Hint>
-                    Reads every vault's balance. Vaults that hold tokens are
-                    scanned for new deposits.
-                </Hint>
-                <Button disabled={scan.isPending} onClick={() => scan.mutate()}>
-                    {scan.isPending ? "Checking…" : "Check vaults"}
-                </Button>
-            </div>
+        <div className="flex flex-col items-end gap-1">
+            <Button
+                title="Reads every vault's balance. Vaults that hold tokens are scanned for new deposits."
+                disabled={scan.isPending}
+                onClick={() => scan.mutate()}
+            >
+                {scan.isPending ? "Checking…" : "Check vaults"}
+            </Button>
             {scan.data?.chains.map((c) => (
-                <p key={c.chain} className="text-sm">
+                <p key={c.chain} className="text-right text-xs">
                     {c.chain}:{" "}
                     {c.error ? (
                         <span className="text-[var(--bad)]">{c.error}</span>
@@ -133,7 +133,7 @@ function CheckVaults() {
                 </p>
             ))}
             <ErrorText error={scan.error} />
-        </Card>
+        </div>
     );
 }
 

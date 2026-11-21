@@ -98,7 +98,10 @@ export const Input = (p: InputHTMLAttributes<HTMLInputElement>) => (
     <input {...p} className={`w-full ${field} ${p.className ?? ""}`} />
 );
 export const Select = (p: SelectHTMLAttributes<HTMLSelectElement>) => (
-    <select {...p} className={`${field} ${p.className ?? ""}`} />
+    <select
+        {...p}
+        className={`sel h-10 cursor-pointer rounded-full border border-[var(--line)] bg-[var(--field)] pr-9 pl-4 text-sm ${p.className ?? ""}`}
+    />
 );
 export const Field = ({
     label,

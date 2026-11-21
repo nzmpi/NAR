@@ -114,7 +114,7 @@ export function Users() {
                                 onChange={(e) =>
                                     setVf(e.target.value as VaultFilter)
                                 }
-                                className="!h-[38px] cursor-pointer !rounded-full px-3.5 text-[13px] font-medium"
+                                className="!h-[38px] text-[13px] font-medium"
                             >
                                 <option value="any">Any vaults</option>
                                 <option value="0">No vault</option>

@@ -45,7 +45,7 @@ export function Withdrawals() {
             {q.isLoading && <Hint>Loading…</Hint>}
             <ErrorText error={q.error} />
             {q.data?.length === 0 && <Hint>Nothing here.</Hint>}
-            <div className="space-y-3">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,340px),1fr))] items-start gap-3">
                 {q.data?.map((r) => (
                     <Row
                         key={r.withdrawal.id}
@@ -103,7 +103,7 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
             : `${r.symbol} (see net USD)`;
 
     return (
-        <Card className="space-y-4">
+        <Card className="space-y-3 !p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                     <div className="font-semibold">{who}</div>
@@ -113,7 +113,7 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
                 </div>
                 <Badge status={w.status} />
             </div>
-            <dl className="grid grid-cols-2 gap-3 text-sm tnum sm:grid-cols-4">
+            <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm tnum">
                 <div>
                     <dt className="text-xs text-[var(--hint)]">Gross</dt>
                     <dd>${fmtUsd(w.grossAmountUsd)}</dd>

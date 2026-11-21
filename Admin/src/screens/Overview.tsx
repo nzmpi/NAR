@@ -93,8 +93,7 @@ export function Overview({
 
     return (
         <div className="flex flex-col gap-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-                <Hint>Figures as of the last settlement</Hint>
+            <div className="flex justify-end">
                 <Segmented
                     label="Range"
                     options={RANGES}

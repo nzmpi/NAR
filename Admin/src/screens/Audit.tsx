@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import type { AuditEntry } from "../lib/types";
@@ -8,6 +8,7 @@ import {
     Input,
     Mono,
     Pill,
+    Select,
     TD,
     TH,
     type Tone,
@@ -25,21 +26,25 @@ const toneFor = (a: string): Tone =>
 
 export function Audit() {
     const [search, setSearch] = useState("");
+    const [action, setAction] = useState("");
+    const [shown, setShown] = useState<AuditEntry | null>(null);
     const q = useQuery({
         queryKey: ["admin-audit"],
         queryFn: () => api<AuditEntry[]>("/admin/audit"),
         refetchInterval: 60_000,
     });
     const s = search.trim().toLowerCase();
+    const actions = [...new Set((q.data ?? []).map((r) => r.action))].sort();
     const rows = (q.data ?? []).filter(
         (r) =>
-            !s ||
-            r.action.toLowerCase().includes(s) ||
-            (r.entityId ?? "").toLowerCase().includes(s) ||
-            r.entityType.toLowerCase().includes(s) ||
-            JSON.stringify(r.details ?? "")
-                .toLowerCase()
-                .includes(s),
+            (!action || r.action === action) &&
+            (!s ||
+                r.action.toLowerCase().includes(s) ||
+                (r.entityId ?? "").toLowerCase().includes(s) ||
+                r.entityType.toLowerCase().includes(s) ||
+                JSON.stringify(r.details ?? "")
+                    .toLowerCase()
+                    .includes(s)),
     );
 
     return (
@@ -52,6 +57,18 @@ export function Audit() {
                     onChange={(e) => setSearch(e.target.value)}
                     className="min-w-0 flex-[1_1_320px] !rounded-full px-4"
                 />
+                <Select
+                    aria-label="Action"
+                    value={action}
+                    onChange={(e) => setAction(e.target.value)}
+                >
+                    <option value="">All actions</option>
+                    {actions.map((a) => (
+                        <option key={a} value={a}>
+                            {a}
+                        </option>
+                    ))}
+                </Select>
                 <span className="text-[13px] text-[var(--hint)]">
                     Latest 200 admin actions · {rows.length} shown
                 </span>
@@ -108,28 +125,96 @@ export function Audit() {
                                     )}
                                 </td>
                                 <td className={TD}>
-                                    {r.details ? (
-                                        <details>
-                                            <summary className="cursor-pointer font-medium text-[var(--link)]">
-                                                view
-                                            </summary>
-                                            <pre className="mt-1 max-w-md whitespace-pre-wrap break-all text-xs">
-                                                {JSON.stringify(
-                                                    r.details,
-                                                    null,
-                                                    2,
-                                                )}
-                                            </pre>
-                                        </details>
-                                    ) : (
-                                        "–"
-                                    )}
+                                    <button
+                                        onClick={() => setShown(r)}
+                                        className="cursor-pointer font-medium text-[var(--link)] hover:underline"
+                                    >
+                                        View
+                                    </button>
                                 </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             </div>
+            {shown && (
+                <DetailsDialog entry={shown} onClose={() => setShown(null)} />
+            )}
         </section>
+    );
+}
+
+// Modal card for one audit entry. Native <dialog>: Esc closes, focus is trapped.
+function DetailsDialog({
+    entry: r,
+    onClose,
+}: {
+    entry: AuditEntry;
+    onClose: () => void;
+}) {
+    const ref = useRef<HTMLDialogElement>(null);
+    useEffect(() => ref.current?.showModal(), []);
+    const d = r.details;
+    const flat =
+        d && typeof d === "object" && !Array.isArray(d)
+            ? Object.entries(d as Record<string, unknown>)
+            : null;
+    const Row = ({ k, v }: { k: string; v: React.ReactNode }) => (
+        <div className="flex justify-between gap-4 border-b border-[var(--row)] py-2 last:border-b-0">
+            <span className="shrink-0 text-[var(--hint)]">{k}</span>
+            <span className="min-w-0 text-right break-all">{v}</span>
+        </div>
+    );
+    return (
+        <dialog
+            ref={ref}
+            onClose={onClose}
+            onClick={(e) => e.target === ref.current && ref.current.close()}
+            aria-labelledby="audit-title"
+            className="m-auto w-[min(520px,calc(100vw-32px))] rounded-2xl border border-[var(--line)] bg-[var(--card)] p-0 text-[var(--fg)] shadow-xl backdrop:bg-black/40"
+        >
+            <div className="flex items-start justify-between gap-3 border-b border-[var(--line)] px-5 py-4">
+                <div className="space-y-1.5">
+                    <h2
+                        id="audit-title"
+                        className="display text-[17px] font-semibold"
+                    >
+                        Audit entry
+                    </h2>
+                    <Pill tone={toneFor(r.action)}>{r.action}</Pill>
+                </div>
+                <button
+                    aria-label="Close"
+                    onClick={() => ref.current?.close()}
+                    className="h-8 w-8 cursor-pointer rounded-full bg-[var(--muted-soft)] text-[var(--soft)]"
+                >
+                    ×
+                </button>
+            </div>
+            <div className="px-5 py-3 text-sm tnum">
+                <Row k="Time" v={new Date(r.createdAt).toLocaleString()} />
+                <Row k="Admin" v={`tg ${r.adminTelegramId}`} />
+                <Row k="Entity" v={r.entityType} />
+                {r.entityId && (
+                    <Row k="Entity ID" v={<Mono>{r.entityId}</Mono>} />
+                )}
+                {flat?.map(([k, v]) => (
+                    <Row
+                        key={k}
+                        k={k}
+                        v={
+                            <Mono>
+                                {typeof v === "string" ? v : JSON.stringify(v)}
+                            </Mono>
+                        }
+                    />
+                ))}
+                {!flat && d != null && (
+                    <pre className="mt-2 max-h-80 overflow-auto rounded-xl bg-[var(--bg)] p-3 text-xs whitespace-pre-wrap break-all">
+                        {JSON.stringify(d, null, 2)}
+                    </pre>
+                )}
+            </div>
+        </dialog>
     );
 }

@@ -106,12 +106,6 @@ export function Settlement({ go }: { go: (t: Tab) => void }) {
     return (
         <div className="flex flex-wrap items-start gap-4">
             <Card className="min-w-0 flex-[3_1_440px] space-y-5 p-6">
-                <Hint>
-                    Enter the current total USD value of all managed funds,
-                    including funds still in user vaults and anything out for
-                    payout. Profit is split across pools using this number. Time
-                    is the server time, and it cannot be backdated.
-                </Hint>
                 <label className="flex flex-col gap-2">
                     <span className="font-semibold">New total (USD)</span>
                     <span className="flex h-[60px] items-center rounded-[14px] border-2 border-[var(--btn)] bg-[var(--field)] px-4 focus-within:ring-4 focus-within:ring-[var(--accent-soft)]">
@@ -179,11 +173,6 @@ export function Settlement({ go }: { go: (t: Tab) => void }) {
                             · optional
                         </span>
                     </div>
-                    <Hint>
-                        Credit extra yield to a user's position, paid from the
-                        manager pool. Only possible when the settlement shows a
-                        profit.
-                    </Hint>
                     {bonuses.map((b, k) => (
                         <div
                             key={k}
