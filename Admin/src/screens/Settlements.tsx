@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { fmtUsd } from "../lib/money";
 import type { AdminSettlement } from "../lib/types";
-import { Card, ErrorText, Hint } from "../components/ui";
+import { ErrorText, Hint, signedUsd, TD, TH, toneOf } from "../components/ui";
 
 export function Settlements() {
     const [all, setAll] = useState(false);
@@ -17,10 +17,11 @@ export function Settlements() {
     });
 
     return (
-        <div className="space-y-3">
-            <label className="flex items-center gap-2 text-sm">
+        <div className="flex flex-col gap-5">
+            <label className="inline-flex cursor-pointer items-center gap-2.5 text-[var(--soft)]">
                 <input
                     type="checkbox"
+                    className="h-[18px] w-[18px]"
                     checked={all}
                     onChange={(e) => setAll(e.target.checked)}
                 />
@@ -30,101 +31,157 @@ export function Settlements() {
             {q.isLoading && <Hint>Loading…</Hint>}
             <ErrorText error={q.error} />
             {q.data?.length === 0 && <Hint>No settlements yet.</Hint>}
-            {q.data?.map((s) => {
-                const pnl = BigInt(s.pnlUsd);
-                return (
-                    <Card key={s.id} className="space-y-2">
-                        <button
-                            className="flex w-full flex-wrap items-center justify-between gap-2 text-left"
-                            onClick={() => setOpen(open === s.id ? null : s.id)}
-                        >
-                            <span className="text-sm">
-                                <b>{new Date(s.settledAt).toLocaleString()}</b>
-                                <span className="ml-2 text-[var(--hint)]">
-                                    {s.kind}
-                                    {s.adminTelegramId &&
-                                        ` · admin ${s.adminTelegramId}`}
-                                </span>
-                            </span>
-                            <span className="text-sm tnum">
-                                ${fmtUsd(s.previousTotalAssetsUsd)} → $
-                                {fmtUsd(s.reportedTotalAssetsUsd)}{" "}
-                                <b
-                                    style={{
-                                        color:
-                                            pnl > 0n
-                                                ? "var(--good)"
-                                                : pnl < 0n
-                                                  ? "var(--bad)"
-                                                  : undefined,
-                                    }}
+            {!!q.data?.length && (
+                <section className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--card)] tnum">
+                    {q.data.map((s, i) => {
+                        const pnl = BigInt(s.pnlUsd);
+                        const isOpen = open === s.id;
+                        return (
+                            <div
+                                key={s.id}
+                                className={
+                                    i ? "border-t border-[var(--row)]" : ""
+                                }
+                            >
+                                <button
+                                    aria-expanded={isOpen}
+                                    onClick={() =>
+                                        setOpen(isOpen ? null : s.id)
+                                    }
+                                    className="flex w-full cursor-pointer flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4 text-left"
                                 >
-                                    ({pnl >= 0n ? "+" : "-"}$
-                                    {fmtUsd(pnl >= 0n ? pnl : -pnl)})
-                                </b>
-                            </span>
-                        </button>
-                        {s.note && (
-                            <div className="text-sm text-[var(--hint)]">
-                                Note: {s.note}
+                                    <span className="min-w-0 flex-[1_1_220px]">
+                                        <span className="block font-semibold">
+                                            {new Date(
+                                                s.settledAt,
+                                            ).toLocaleString()}
+                                        </span>
+                                        <span className="block text-xs text-[var(--hint)]">
+                                            {s.kind}
+                                            {s.adminTelegramId &&
+                                                ` · admin ${s.adminTelegramId}`}
+                                        </span>
+                                    </span>
+                                    <span className="text-[var(--soft)]">
+                                        ${fmtUsd(s.previousTotalAssetsUsd)} → $
+                                        {fmtUsd(s.reportedTotalAssetsUsd)}
+                                    </span>
+                                    <span
+                                        className="min-w-[110px] text-right font-semibold"
+                                        style={{
+                                            color: toneOf(pnl) ?? "var(--hint)",
+                                        }}
+                                    >
+                                        {signedUsd(pnl, fmtUsd)}
+                                    </span>
+                                    <svg
+                                        width="18"
+                                        height="18"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        aria-hidden="true"
+                                        className={`text-[var(--hint)] ${isOpen ? "rotate-180" : ""}`}
+                                    >
+                                        <path d="M6 9l6 6 6-6" />
+                                    </svg>
+                                </button>
+                                {isOpen && (
+                                    <div className="flex flex-col gap-2.5 px-5 pb-[18px]">
+                                        {s.note && <Hint>Note: {s.note}</Hint>}
+                                        {s.allocations.length === 0 ? (
+                                            <Hint>
+                                                No allocations (no change).
+                                            </Hint>
+                                        ) : (
+                                            <div className="overflow-x-auto rounded-xl border border-[var(--line)]">
+                                                <table className="w-full min-w-[520px] border-collapse">
+                                                    <thead className="bg-[var(--bg)]">
+                                                        <tr>
+                                                            <th className={TH}>
+                                                                Pool
+                                                            </th>
+                                                            <th className={TH}>
+                                                                Type
+                                                            </th>
+                                                            <th
+                                                                className={`${TH} text-right`}
+                                                            >
+                                                                Amount
+                                                            </th>
+                                                            <th
+                                                                className={`${TH} text-right`}
+                                                            >
+                                                                NAV after
+                                                            </th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {s.allocations.map(
+                                                            (a, k) => {
+                                                                const amt =
+                                                                    BigInt(
+                                                                        a.amountUsd,
+                                                                    );
+                                                                return (
+                                                                    <tr
+                                                                        key={k}
+                                                                        className="border-t border-[var(--row)]"
+                                                                    >
+                                                                        <td
+                                                                            className={
+                                                                                TD
+                                                                            }
+                                                                        >
+                                                                            {
+                                                                                a.pool
+                                                                            }
+                                                                        </td>
+                                                                        <td
+                                                                            className={`${TD} text-[var(--soft)]`}
+                                                                        >
+                                                                            {
+                                                                                a.kind
+                                                                            }
+                                                                        </td>
+                                                                        <td
+                                                                            className={`${TD} text-right font-medium`}
+                                                                            style={{
+                                                                                color: toneOf(
+                                                                                    amt,
+                                                                                ),
+                                                                            }}
+                                                                        >
+                                                                            {signedUsd(
+                                                                                amt,
+                                                                                fmtUsd,
+                                                                            )}
+                                                                        </td>
+                                                                        <td
+                                                                            className={`${TD} text-right`}
+                                                                        >
+                                                                            $
+                                                                            {fmtUsd(
+                                                                                a.navAfterUsd,
+                                                                            )}
+                                                                        </td>
+                                                                    </tr>
+                                                                );
+                                                            },
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
-                        )}
-                        {open === s.id &&
-                            (s.allocations.length === 0 ? (
-                                <Hint>No allocations (no change).</Hint>
-                            ) : (
-                                <table className="w-full text-sm tnum">
-                                    <thead className="text-left text-[var(--hint)]">
-                                        <tr>
-                                            <th className="py-1">Pool</th>
-                                            <th>Type</th>
-                                            <th>Amount</th>
-                                            <th>NAV after</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {s.allocations.map((a, k) => (
-                                            <tr
-                                                key={k}
-                                                className="border-t border-[var(--line)]"
-                                            >
-                                                <td className="py-1">
-                                                    {a.pool}
-                                                </td>
-                                                <td>{a.kind}</td>
-                                                <td
-                                                    style={{
-                                                        color:
-                                                            BigInt(
-                                                                a.amountUsd,
-                                                            ) < 0n
-                                                                ? "var(--bad)"
-                                                                : undefined,
-                                                    }}
-                                                >
-                                                    {BigInt(a.amountUsd) < 0n
-                                                        ? "-"
-                                                        : ""}
-                                                    $
-                                                    {fmtUsd(
-                                                        BigInt(a.amountUsd) < 0n
-                                                            ? -BigInt(
-                                                                  a.amountUsd,
-                                                              )
-                                                            : a.amountUsd,
-                                                    )}
-                                                </td>
-                                                <td>
-                                                    ${fmtUsd(a.navAfterUsd)}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            ))}
-                    </Card>
-                );
-            })}
+                        );
+                    })}
+                </section>
+            )}
         </div>
     );
 }

@@ -2,23 +2,31 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, useAction } from "../lib/api";
 import { fmtUsd, parseUnits } from "../lib/money";
+import type { Tab } from "../App";
 import type {
     AdminPools,
+    AdminSettlement,
     AdminUser,
     AdminUserPortfolio,
     SettlementResult,
 } from "../lib/types";
-import { Button, Card, ErrorText, Hint, Input } from "../components/ui";
+import {
+    Button,
+    Card,
+    ErrorText,
+    Hint,
+    Input,
+    Select,
+    signedUsd,
+    toneOf,
+} from "../components/ui";
 
 interface Bonus {
     lotId: string;
     label: string;
     amount: string;
 }
-const selCls =
-    "rounded-lg border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-sm";
-
-export function Settlement() {
+export function Settlement({ go }: { go: (t: Tab) => void }) {
     const qc = useQueryClient();
     const pools = useQuery({
         queryKey: ["admin-pools"],
@@ -29,6 +37,10 @@ export function Settlement() {
     const [checked, setChecked] = useState(false);
     const [confirm, setConfirm] = useState(false);
     const [bonuses, setBonuses] = useState<Bonus[]>([]);
+    const last = useQuery({
+        queryKey: ["admin-settlements", false],
+        queryFn: () => api<AdminSettlement[]>("/admin/settlements"),
+    });
 
     const run = useAction({
         mutationFn: (reportedTotalUsd: string, key) =>
@@ -53,7 +65,12 @@ export function Settlement() {
             setChecked(false);
             setConfirm(false);
             setBonuses([]);
-            for (const k of ["admin-pools", "admin-perf", "admin-user-pf"])
+            for (const k of [
+                "admin-pools",
+                "admin-perf",
+                "admin-user-pf",
+                "admin-settlements",
+            ])
                 qc.invalidateQueries({ queryKey: [k] });
         },
     });
@@ -83,51 +100,65 @@ export function Settlement() {
             bonuses.every((b) => (parseUnits(b.amount, 6) ?? 0n) > 0n));
     const ok = next !== null && next > 0n && (!big || checked) && bonusOk;
 
+    const color = diff === null ? "var(--hint)" : (toneOf(diff) ?? "var(--fg)");
+    const prev = last.data?.[0];
+
     return (
-        <div className="max-w-xl space-y-4">
-            <Card className="space-y-3">
-                <h2 className="font-medium">Record settlement</h2>
-                <Hint>
-                    Enter the current total USD value of all managed funds,
-                    including funds still in user vaults and anything out for
-                    payout. Profit is split across pools using this number. Time
-                    is the server time, and it cannot be backdated.
-                </Hint>
-                <div className="text-sm">
-                    Last recorded total:{" "}
-                    <b className="tnum">${fmtUsd(current)}</b>
-                </div>
-                <label className="block text-sm">
-                    New total (USD)
-                    <Input
-                        inputMode="decimal"
-                        value={value}
-                        onChange={(e) => {
-                            setValue(e.target.value);
-                            setConfirm(false);
-                        }}
-                        placeholder="e.g. 12500.00"
-                        className="tnum mt-1"
-                    />
+        <div className="flex flex-wrap items-start gap-4">
+            <Card className="min-w-0 flex-[3_1_440px] space-y-5 p-6">
+                <label className="flex flex-col gap-2">
+                    <span className="font-semibold">New total (USD)</span>
+                    <span className="flex h-[60px] items-center rounded-[14px] border-2 border-[var(--btn)] bg-[var(--field)] px-4 focus-within:ring-4 focus-within:ring-[var(--accent-soft)]">
+                        <span className="display text-[26px] text-[var(--hint)]">
+                            $
+                        </span>
+                        <input
+                            inputMode="decimal"
+                            value={value}
+                            onChange={(e) => {
+                                setValue(e.target.value);
+                                setConfirm(false);
+                            }}
+                            placeholder="e.g. 12500.00"
+                            className="display min-w-0 flex-1 bg-transparent pl-1.5 text-[26px] font-semibold outline-none tnum"
+                        />
+                    </span>
                 </label>
-                {diff !== null && (
-                    <div
-                        className="text-sm tnum"
-                        style={{
-                            color: diff >= 0n ? "var(--good)" : "var(--bad)",
-                        }}
-                    >
-                        {diff >= 0n ? "Profit" : "Loss"}:{" "}
-                        {diff >= 0n ? "+" : "-"}$
-                        {fmtUsd(diff >= 0n ? diff : -diff)}
-                        {pctChange !== null &&
-                            ` (${pctChange >= 0 ? "+" : ""}${pctChange}%)`}
+                <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-px overflow-hidden rounded-[14px] border border-[var(--line)] bg-[var(--line)] tnum">
+                    <div className="bg-[var(--card)] px-4 py-3.5">
+                        <div className="text-xs text-[var(--hint)]">
+                            Last recorded
+                        </div>
+                        <div className="mt-1 font-semibold">
+                            ${fmtUsd(current)}
+                        </div>
                     </div>
-                )}
+                    <div className="bg-[var(--card)] px-4 py-3.5">
+                        <div className="text-xs text-[var(--hint)]">
+                            {diff === null
+                                ? "Profit / loss"
+                                : diff >= 0n
+                                  ? "Profit"
+                                  : "Loss"}
+                        </div>
+                        <div className="mt-1 font-semibold" style={{ color }}>
+                            {diff === null ? "–" : signedUsd(diff, fmtUsd)}
+                        </div>
+                    </div>
+                    <div className="bg-[var(--card)] px-4 py-3.5">
+                        <div className="text-xs text-[var(--hint)]">Change</div>
+                        <div className="mt-1 font-semibold" style={{ color }}>
+                            {pctChange === null
+                                ? "–"
+                                : `${pctChange > 0 ? "+" : pctChange < 0 ? "−" : ""}${Math.abs(pctChange)}%`}
+                        </div>
+                    </div>
+                </div>
                 {big && (
-                    <label className="flex items-center gap-2 text-sm text-[var(--warn)]">
+                    <label className="flex items-center gap-2.5 rounded-xl bg-[var(--warn-soft)] px-3.5 py-3 font-medium text-[var(--warn)]">
                         <input
                             type="checkbox"
+                            className="h-[18px] w-[18px]"
                             checked={checked}
                             onChange={(e) => setChecked(e.target.checked)}
                         />
@@ -135,15 +166,13 @@ export function Settlement() {
                     </label>
                 )}
 
-                <div className="space-y-2 border-t border-[var(--line)] pt-3">
-                    <div className="text-sm font-medium">
-                        Bonuses (optional)
+                <div className="space-y-2.5 border-t border-[var(--line)] pt-4">
+                    <div className="font-semibold">
+                        Bonuses{" "}
+                        <span className="font-normal text-[var(--hint)]">
+                            · optional
+                        </span>
                     </div>
-                    <Hint>
-                        Credit extra yield to a user's position, paid from the
-                        manager pool. Only possible when the settlement shows a
-                        profit.
-                    </Hint>
                     {bonuses.map((b, k) => (
                         <div
                             key={k}
@@ -200,54 +229,97 @@ export function Settlement() {
                     />
                 </div>
 
-                <label className="block text-sm">
-                    Note (optional)
+                <label className="flex flex-col gap-1.5 text-sm">
+                    <span className="text-[13px] text-[var(--hint)]">
+                        Note (optional)
+                    </span>
                     <Input
                         value={note}
                         onChange={(e) => setNote(e.target.value)}
                         maxLength={500}
-                        className="mt-1"
                     />
                 </label>
                 <ErrorText error={run.error} />
-                {!confirm ? (
-                    <Button disabled={!ok} onClick={() => setConfirm(true)}>
-                        Review
-                    </Button>
-                ) : (
-                    <div className="flex gap-2">
+                <div className="flex flex-wrap justify-end gap-2">
+                    {!confirm ? (
                         <Button
-                            disabled={run.isPending}
-                            onClick={() => run.mutate(next!.toString())}
+                            className="!h-11 px-6"
+                            disabled={!ok}
+                            onClick={() => setConfirm(true)}
                         >
-                            {run.isPending
-                                ? "Recording…"
-                                : `Confirm $${fmtUsd(next!)}`}
+                            Review
                         </Button>
-                        <Button
-                            variant="ghost"
-                            onClick={() => setConfirm(false)}
-                        >
-                            Back
-                        </Button>
-                    </div>
-                )}
+                    ) : (
+                        <>
+                            <Button
+                                variant="ghost"
+                                className="!h-11 px-5"
+                                onClick={() => setConfirm(false)}
+                            >
+                                Back
+                            </Button>
+                            <Button
+                                className="!h-11 px-6"
+                                disabled={run.isPending}
+                                onClick={() => run.mutate(next!.toString())}
+                            >
+                                {run.isPending
+                                    ? "Recording…"
+                                    : `Confirm $${fmtUsd(next!)}`}
+                            </Button>
+                        </>
+                    )}
+                </div>
             </Card>
-            {run.data && (
-                <Card>
-                    <div className="text-sm">
-                        Recorded. P&L{" "}
-                        <b className="tnum">${fmtUsd(run.data.pnlUsd)}</b>
-                        {run.data.convertedLots.length > 0 && (
-                            <>
-                                {" "}
-                                · {run.data.convertedLots.length} matured
-                                position(s) moved to liquid
-                            </>
-                        )}
-                    </div>
-                </Card>
-            )}
+            <aside className="flex min-w-0 flex-[2_1_300px] flex-col gap-3">
+                {prev && (
+                    <Card className="space-y-3 text-sm tnum">
+                        <h2 className="display text-[17px] font-semibold">
+                            Last settlement
+                        </h2>
+                        <div className="flex justify-between gap-3">
+                            <span className="text-[var(--hint)]">When</span>
+                            <span>
+                                {new Date(prev.settledAt).toLocaleString()}
+                            </span>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                            <span className="text-[var(--hint)]">Kind</span>
+                            <span>{prev.kind}</span>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                            <span className="text-[var(--hint)]">Result</span>
+                            <span
+                                className="font-semibold"
+                                style={{ color: toneOf(BigInt(prev.pnlUsd)) }}
+                            >
+                                {signedUsd(BigInt(prev.pnlUsd), fmtUsd)}
+                            </span>
+                        </div>
+                        <button
+                            onClick={() => go("settlements")}
+                            className="cursor-pointer font-semibold text-[var(--link)]"
+                        >
+                            See history →
+                        </button>
+                    </Card>
+                )}
+                {run.data && (
+                    <Card>
+                        <div className="text-sm">
+                            Recorded. P&L{" "}
+                            <b className="tnum">${fmtUsd(run.data.pnlUsd)}</b>
+                            {run.data.convertedLots.length > 0 && (
+                                <>
+                                    {" "}
+                                    · {run.data.convertedLots.length} matured
+                                    position(s) moved to liquid
+                                </>
+                            )}
+                        </div>
+                    </Card>
+                )}
+            </aside>
         </div>
     );
 }
@@ -289,7 +361,7 @@ function AddBonus({
     const amt = parseUnits(amount, 6);
 
     return (
-        <div className="space-y-2 rounded-lg border border-[var(--line)] p-3">
+        <div className="space-y-3 rounded-xl border border-[var(--line)] bg-[var(--bg)] p-4">
             <Input
                 placeholder="Find user (@username or Telegram ID)"
                 value={search}
@@ -304,6 +376,7 @@ function AddBonus({
                     {matches.map((u) => (
                         <Button
                             key={u.id}
+                            size="sm"
                             variant="ghost"
                             onClick={() => {
                                 setUserId(u.id);
@@ -321,10 +394,10 @@ function AddBonus({
             )}
             {userId && (
                 <div className="flex flex-wrap gap-2">
-                    <select
+                    <Select
+                        aria-label="Position"
                         value={lotId}
                         onChange={(e) => setLotId(e.target.value)}
-                        className={selCls}
                     >
                         <option value="">Position…</option>
                         {pf.data?.lots
@@ -334,7 +407,7 @@ function AddBonus({
                                     {l.pool} · ${fmtUsd(l.valueUsd)}
                                 </option>
                             ))}
-                    </select>
+                    </Select>
                     <Input
                         placeholder="Bonus USD"
                         inputMode="decimal"

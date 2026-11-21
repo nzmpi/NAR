@@ -5,12 +5,23 @@ import type { AdminAsset, AdminChain } from "../lib/types";
 import {
     Badge,
     Button,
-    Card,
     ErrorText,
+    Field,
     Hint,
     Input,
     Mono,
+    Panel,
+    Select,
+    TD,
+    TH,
+    Warn,
 } from "../components/ui";
+
+const Foot = ({ children }: { children: React.ReactNode }) => (
+    <div className="space-y-2.5 border-t border-[var(--line)] bg-[var(--bg)] px-5 py-4">
+        {children}
+    </div>
+);
 
 export function Setup() {
     const qc = useQueryClient();
@@ -28,39 +39,73 @@ export function Setup() {
     };
 
     return (
-        <div className="space-y-6">
-            <section className="space-y-3">
-                <h2 className="font-medium">Chains</h2>
-                <Card className="space-y-1 text-sm">
-                    {chains.data?.map((c) => (
-                        <div key={c.id} className="flex justify-between">
-                            <span>
-                                {c.name}{" "}
-                                <span className="text-[var(--hint)]">
-                                    · chain id {c.chainId}
-                                </span>
-                            </span>
+        <div className="flex flex-col gap-5">
+            <Hint>
+                Chains and tokens users can deposit. Changes here affect every
+                new deposit.
+            </Hint>
+            <ErrorText error={chains.error || assets.error} />
+            <div className="flex flex-wrap items-start gap-4">
+                <Panel title="Chains" className="min-w-0 flex-[1_1_340px]">
+                    {chains.data?.map((c, i) => (
+                        <div
+                            key={c.id}
+                            className={`flex items-center gap-3 px-5 py-3.5 ${i ? "border-t border-[var(--row)]" : ""}`}
+                        >
+                            <div className="flex-1">
+                                <div className="font-semibold">{c.name}</div>
+                                <div className="text-xs text-[var(--hint)]">
+                                    chain id {c.chainId}
+                                </div>
+                            </div>
                             <Badge
                                 status={c.isActive ? "active" : "inactive"}
                             />
                         </div>
                     ))}
-                    {chains.data?.length === 0 && <Hint>No chains yet.</Hint>}
-                </Card>
-                <AddChain onDone={refresh} />
-            </section>
+                    {chains.data?.length === 0 && (
+                        <div className="px-5 py-4">
+                            <Hint>No chains yet.</Hint>
+                        </div>
+                    )}
+                    <AddChain onDone={refresh} />
+                </Panel>
 
-            <section className="space-y-3">
-                <h2 className="font-medium">Assets</h2>
-                <div className="space-y-2">
-                    {assets.data?.map((a) => (
-                        <AssetRow key={a.id} a={a} onDone={refresh} />
-                    ))}
-                    {assets.data?.length === 0 && <Hint>No assets yet.</Hint>}
-                </div>
-                <ErrorText error={chains.error || assets.error} />
-                <AddAsset chains={chains.data ?? []} onDone={refresh} />
-            </section>
+                <Panel title="Assets" className="min-w-0 flex-[2_1_480px]">
+                    <div className="overflow-x-auto">
+                        <table className="w-full min-w-[520px] border-collapse">
+                            <thead>
+                                <tr>
+                                    <th className={TH}>Token</th>
+                                    <th className={TH}>Contract</th>
+                                    <th className={`${TH} text-right`}>
+                                        Decimals
+                                    </th>
+                                    <th className={TH}>Status</th>
+                                    <th className={TH}>
+                                        <span className="sr-only">Actions</span>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {assets.data?.map((a) => (
+                                    <AssetRow
+                                        key={a.id}
+                                        a={a}
+                                        onDone={refresh}
+                                    />
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    {assets.data?.length === 0 && (
+                        <div className="px-5 py-4">
+                            <Hint>No assets yet.</Hint>
+                        </div>
+                    )}
+                    <AddAsset chains={chains.data ?? []} onDone={refresh} />
+                </Panel>
+            </div>
         </div>
     );
 }
@@ -82,37 +127,41 @@ function AddChain({ onDone }: { onDone: () => void }) {
         },
     });
     return (
-        <Card className="space-y-2">
-            <h3 className="text-sm font-medium">Add chain</h3>
-            <div className="flex flex-wrap gap-2">
-                <Input
-                    placeholder="Name (e.g. Polygon)"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="flex-1"
-                />
-                <Input
-                    placeholder="Chain ID (137)"
-                    inputMode="numeric"
-                    value={id}
-                    onChange={(e) => setId(e.target.value.replace(/\D/g, ""))}
-                    className="w-32"
-                />
+        <Foot>
+            <h3 className="text-sm font-semibold">Add chain</h3>
+            <div className="flex flex-wrap items-end gap-2">
+                <Field label="Name" className="flex-[2_1_160px]">
+                    <Input
+                        placeholder="Polygon"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                    />
+                </Field>
+                <Field label="Chain ID" className="flex-[1_1_100px]">
+                    <Input
+                        placeholder="137"
+                        inputMode="numeric"
+                        value={id}
+                        onChange={(e) =>
+                            setId(e.target.value.replace(/\D/g, ""))
+                        }
+                    />
+                </Field>
                 <Button
                     disabled={!name.trim() || !id || go.isPending}
                     onClick={() => go.mutate()}
                 >
-                    Add
+                    Add chain
                 </Button>
             </div>
-            <Hint>
+            <p className="text-xs text-[var(--hint)]">
                 After adding a chain: set RPC_URL_&lt;chainId&gt; in the API
                 environment and restart it. The Factory and Vault bytecode must
                 be the same as on the other chains, or vault addresses will
                 differ.
-            </Hint>
+            </p>
             <ErrorText error={go.error} />
-        </Card>
+        </Foot>
     );
 }
 
@@ -127,28 +176,34 @@ function AssetRow({ a, onDone }: { a: AdminAsset; onDone: () => void }) {
         onSuccess: onDone,
     });
     return (
-        <Card className="space-y-1">
-            <div className="flex items-center justify-between text-sm">
-                <span>
-                    <b>{a.symbol}</b> on {a.chainName}{" "}
-                    <span className="text-[var(--hint)]">
-                        · {a.decimals} decimals
-                    </span>
+        <tr className="border-t border-[var(--row)] align-top">
+            <td className={TD}>
+                <div className="font-semibold">{a.symbol}</div>
+                <div className="text-xs text-[var(--hint)]">{a.chainName}</div>
+            </td>
+            <td className={`${TD} text-[var(--soft)]`}>
+                <span title={a.tokenAddress}>
+                    <Mono>
+                        {a.tokenAddress.slice(0, 6)}…{a.tokenAddress.slice(-4)}
+                    </Mono>
                 </span>
-                <div className="flex items-center gap-2">
-                    <Badge status={a.isActive ? "active" : "inactive"} />
-                    <Button
-                        variant="ghost"
-                        disabled={go.isPending}
-                        onClick={() => go.mutate()}
-                    >
-                        {a.isActive ? "Disable" : "Enable"}
-                    </Button>
-                </div>
-            </div>
-            <Mono>{a.tokenAddress}</Mono>
-            <ErrorText error={go.error} />
-        </Card>
+            </td>
+            <td className={`${TD} text-right tnum`}>{a.decimals}</td>
+            <td className={TD}>
+                <Badge status={a.isActive ? "active" : "inactive"} />
+            </td>
+            <td className={`${TD} text-right`}>
+                <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={go.isPending}
+                    onClick={() => go.mutate()}
+                >
+                    {a.isActive ? "Disable" : "Enable"}
+                </Button>
+                <ErrorText error={go.error} />
+            </td>
+        </tr>
     );
 }
 
@@ -181,45 +236,55 @@ function AddAsset({
             onDone();
         },
     });
-    const sel =
-        "rounded-lg border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-sm";
     return (
-        <Card className="space-y-2">
-            <h3 className="text-sm font-medium">Add asset</h3>
-            <div className="flex flex-wrap gap-2">
-                <select
-                    value={chain || chains[0]?.id || ""}
-                    onChange={(e) => setChain(e.target.value)}
-                    className={sel}
+        <Foot>
+            <h3 className="text-sm font-semibold">Add asset</h3>
+            <div className="flex flex-wrap items-end gap-2">
+                <Field label="Chain" className="flex-[1_1_140px]">
+                    <Select
+                        value={chain || chains[0]?.id || ""}
+                        onChange={(e) => setChain(e.target.value)}
+                    >
+                        {chains.map((c) => (
+                            <option key={c.id} value={c.id}>
+                                {c.name}
+                            </option>
+                        ))}
+                    </Select>
+                </Field>
+                <Field label="Symbol" className="flex-[1_1_100px]">
+                    <Select
+                        value={symbol}
+                        onChange={(e) =>
+                            setSymbol(e.target.value as typeof symbol)
+                        }
+                    >
+                        {["USDT", "USDC", "DAI"].map((s) => (
+                            <option key={s}>{s}</option>
+                        ))}
+                    </Select>
+                </Field>
+                <Field
+                    label="Token contract"
+                    className="min-w-0 flex-[3_1_220px]"
                 >
-                    {chains.map((c) => (
-                        <option key={c.id} value={c.id}>
-                            {c.name}
-                        </option>
-                    ))}
-                </select>
-                <select
-                    value={symbol}
-                    onChange={(e) => setSymbol(e.target.value as typeof symbol)}
-                    className={sel}
-                >
-                    {["USDT", "USDC", "DAI"].map((s) => (
-                        <option key={s}>{s}</option>
-                    ))}
-                </select>
-                <Input
-                    placeholder="Token contract 0x…"
-                    value={addr}
-                    onChange={(e) => setAddr(e.target.value)}
-                    className="min-w-0 flex-1 font-mono"
-                />
-                <Input
-                    placeholder="Decimals"
-                    inputMode="numeric"
-                    value={dec}
-                    onChange={(e) => setDec(e.target.value.replace(/\D/g, ""))}
-                    className="w-24"
-                />
+                    <Input
+                        placeholder="0x…"
+                        value={addr}
+                        onChange={(e) => setAddr(e.target.value)}
+                        className="font-mono"
+                    />
+                </Field>
+                <Field label="Decimals" className="flex-[1_1_90px]">
+                    <Input
+                        placeholder="6"
+                        inputMode="numeric"
+                        value={dec}
+                        onChange={(e) =>
+                            setDec(e.target.value.replace(/\D/g, ""))
+                        }
+                    />
+                </Field>
                 <Button
                     disabled={
                         !/^0x[a-fA-F0-9]{40}$/.test(addr.trim()) ||
@@ -229,14 +294,14 @@ function AddAsset({
                     }
                     onClick={() => go.mutate()}
                 >
-                    Add
+                    Add asset
                 </Button>
             </div>
-            <Hint>
+            <Warn>
                 Check the decimals on the explorer: USDT and USDC are 6 on most
                 chains but 18 on BNB Chain. A wrong value misprices deposits.
-            </Hint>
+            </Warn>
             <ErrorText error={go.error} />
-        </Card>
+        </Foot>
     );
 }

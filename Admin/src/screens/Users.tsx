@@ -18,53 +18,239 @@ import {
     Hint,
     Input,
     Mono,
+    Pill,
+    Segmented,
+    Select,
+    TD,
+    TH,
 } from "../components/ui";
+
+const STATUS = [
+    { id: "all", label: "All" },
+    { id: "active", label: "Active" },
+    { id: "blocked", label: "Blocked" },
+] as const;
+type Status = (typeof STATUS)[number]["id"];
+type VaultFilter = "any" | "0" | "1" | "2" | "full";
+type BalanceFilter = "any" | "some" | "zero";
+const name = (u: AdminUser) => (u.username ? `@${u.username}` : u.telegramId);
 
 export function Users() {
     const [search, setSearch] = useState("");
+    const [status, setStatus] = useState<Status>("all");
+    const [vf, setVf] = useState<VaultFilter>("any");
+    const [bf, setBf] = useState<BalanceFilter>("any");
     const [open, setOpen] = useState<string | null>(null);
     const q = useQuery({
         queryKey: ["admin-users"],
         queryFn: () => api<AdminUser[]>("/admin/users"),
     });
+
+    const users = q.data ?? [];
     const s = search.trim().toLowerCase().replace(/^@/, "");
-    const rows = (q.data ?? []).filter(
+    const okVaults = (u: AdminUser) => {
+        const n = u.vaultCount;
+        if (vf === "any") return true;
+        if (vf === "full") return n >= u.maxVaults;
+        if (vf === "2") return n >= 2;
+        return n === Number(vf);
+    };
+    const rows = users.filter(
         (u) =>
-            !s ||
-            u.telegramId.includes(s) ||
-            (u.username ?? "").toLowerCase().includes(s) ||
-            u.id.startsWith(s),
+            (!s ||
+                u.telegramId.includes(s) ||
+                (u.username ?? "").toLowerCase().includes(s) ||
+                u.id.startsWith(s)) &&
+            (status === "all" || (status === "blocked") === u.isBlocked) &&
+            okVaults(u) &&
+            (bf === "any" || (bf === "zero") === (BigInt(u.balanceUsd) === 0n)),
     );
+    const filtered = status !== "all" || vf !== "any" || bf !== "any";
+    const sel = users.find((u) => u.id === open);
 
     return (
-        <div className="space-y-3">
-            <Allowlist />
-            <Input
-                placeholder="Search by @username, Telegram ID or user ID"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-            />
-            {q.isLoading && <Hint>Loading…</Hint>}
-            <ErrorText error={q.error} />
-            <Hint>{rows.length} user(s)</Hint>
-            {rows.slice(0, 100).map((u) => (
-                <Card key={u.id} className="space-y-3">
-                    <button
-                        className="flex w-full items-center justify-between text-left"
-                        onClick={() => setOpen(open === u.id ? null : u.id)}
-                    >
-                        <span className="font-medium">
-                            {u.username ? `@${u.username}` : u.telegramId}
-                            <span className="ml-2 text-sm font-normal text-[var(--hint)]">
-                                tg {u.telegramId} · joined{" "}
-                                {new Date(u.createdAt).toLocaleDateString()}
+        <div className="flex flex-col gap-5">
+            <div className="flex flex-wrap items-start gap-4">
+                <section className="min-w-0 flex-[3_1_420px] overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--card)]">
+                    <div className="flex flex-col gap-2.5 border-b border-[var(--line)] p-4">
+                        <div className="flex flex-wrap items-center gap-2.5">
+                            <Input
+                                aria-label="Search users"
+                                placeholder="Search by @username, Telegram ID or user ID"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                className="min-w-0 flex-[1_1_260px] !rounded-full px-4"
+                            />
+                            <span className="text-[13px] text-[var(--hint)]">
+                                {filtered || s
+                                    ? `${rows.length} of ${users.length} users`
+                                    : `${users.length} users`}
                             </span>
-                        </span>
-                        {u.isBlocked && <Badge status="blocked" />}
-                    </button>
-                    {open === u.id && <UserDetail u={u} />}
-                </Card>
-            ))}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Segmented
+                                label="Status"
+                                value={status}
+                                onChange={setStatus}
+                                options={STATUS.map((o) => ({
+                                    ...o,
+                                    count:
+                                        o.id === "all"
+                                            ? users.length
+                                            : users.filter(
+                                                  (u) =>
+                                                      (o.id === "blocked") ===
+                                                      u.isBlocked,
+                                              ).length,
+                                }))}
+                            />
+                            <Select
+                                aria-label="Vaults"
+                                value={vf}
+                                onChange={(e) =>
+                                    setVf(e.target.value as VaultFilter)
+                                }
+                                className="!h-[38px] text-[13px] font-medium"
+                            >
+                                <option value="any">Any vaults</option>
+                                <option value="0">No vault</option>
+                                <option value="1">1 vault</option>
+                                <option value="2">2+ vaults</option>
+                                <option value="full">At vault limit</option>
+                            </Select>
+                            <Select
+                                aria-label="Balance"
+                                value={bf}
+                                onChange={(e) =>
+                                    setBf(e.target.value as BalanceFilter)
+                                }
+                                className="!h-[38px] text-[13px] font-medium"
+                            >
+                                <option value="any">Any balance</option>
+                                <option value="some">Has balance</option>
+                                <option value="zero">Zero balance</option>
+                            </Select>
+                            {filtered && (
+                                <button
+                                    onClick={() => {
+                                        setStatus("all");
+                                        setVf("any");
+                                        setBf("any");
+                                    }}
+                                    className="h-[38px] cursor-pointer rounded-full px-3 text-[13px] font-semibold text-[var(--link)]"
+                                >
+                                    Clear filters
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    {q.isLoading && (
+                        <div className="p-5">
+                            <Hint>Loading…</Hint>
+                        </div>
+                    )}
+                    <div className="px-5">
+                        <ErrorText error={q.error} />
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full min-w-[560px] border-collapse">
+                            <thead>
+                                <tr>
+                                    <th className={TH}>User</th>
+                                    <th className={TH}>Joined</th>
+                                    <th className={`${TH} text-right`}>
+                                        Balance
+                                    </th>
+                                    <th className={`${TH} text-right`}>
+                                        Vaults
+                                    </th>
+                                    <th className={TH}>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {rows.slice(0, 100).map((u) => (
+                                    <tr
+                                        key={u.id}
+                                        onClick={() => setOpen(u.id)}
+                                        className={`cursor-pointer border-t border-[var(--row)] ${u.id === open ? "bg-[var(--accent-soft)]" : "hover:bg-[var(--bg)]"}`}
+                                    >
+                                        <td className={TD}>
+                                            <button
+                                                onClick={() => setOpen(u.id)}
+                                                aria-pressed={u.id === open}
+                                                className="cursor-pointer text-left font-semibold"
+                                            >
+                                                {name(u)}
+                                            </button>
+                                            <div className="text-xs text-[var(--hint)]">
+                                                tg {u.telegramId}
+                                            </div>
+                                        </td>
+                                        <td
+                                            className={`${TD} text-[var(--soft)]`}
+                                        >
+                                            {new Date(
+                                                u.createdAt,
+                                            ).toLocaleDateString()}
+                                        </td>
+                                        <td
+                                            className={`${TD} text-right font-medium`}
+                                        >
+                                            ${fmtUsd(u.balanceUsd)}
+                                        </td>
+                                        <td className={`${TD} text-right`}>
+                                            {u.vaultCount} / {u.maxVaults}
+                                        </td>
+                                        <td className={TD}>
+                                            <Pill
+                                                tone={
+                                                    u.isBlocked ? "bad" : "good"
+                                                }
+                                            >
+                                                {u.isBlocked
+                                                    ? "Blocked"
+                                                    : "Active"}
+                                            </Pill>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {!q.isLoading && rows.length === 0 && (
+                                    <tr className="border-t border-[var(--row)]">
+                                        <td
+                                            colSpan={5}
+                                            className="px-4 py-7 text-center text-[var(--hint)]"
+                                        >
+                                            No users match these filters.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                    {rows.length > 100 && (
+                        <div className="border-t border-[var(--row)] px-5 py-3">
+                            <Hint>
+                                Showing the first 100. Search to narrow it down.
+                            </Hint>
+                        </div>
+                    )}
+                </section>
+
+                <aside
+                    aria-label="Selected user"
+                    className="min-w-0 flex-[2_1_340px] rounded-2xl border border-[var(--line)] bg-[var(--card)] p-5"
+                >
+                    {sel ? (
+                        <UserDetail key={sel.id} u={sel} />
+                    ) : (
+                        <Hint>
+                            Select a user to see their balance, positions and
+                            vaults.
+                        </Hint>
+                    )}
+                </aside>
+            </div>
+            <Allowlist />
         </div>
     );
 }
@@ -98,21 +284,26 @@ function Allowlist() {
     });
 
     return (
-        <Card className="space-y-3">
-            <h3 className="font-medium">Invite allowlist</h3>
+        <Card className="space-y-3.5">
+            <h2 className="display text-[17px] font-semibold">
+                Invite allowlist
+            </h2>
             <Hint>
                 In prod only these Telegram IDs can sign up. Removing an ID
                 stops sign-up only; block the user to cut existing access.
             </Hint>
             <div className="flex flex-wrap gap-2">
                 <Input
+                    aria-label="Telegram ID"
                     placeholder="Telegram ID"
                     inputMode="numeric"
                     value={tg}
                     onChange={(e) => setTg(e.target.value)}
-                    className="font-mono"
+                    className="flex-[1_1_180px] tnum"
                 />
                 <Input
+                    aria-label="Note"
+                    className="flex-[2_1_260px]"
                     placeholder="Note (optional)"
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
@@ -121,39 +312,42 @@ function Allowlist() {
                     disabled={!/^[0-9]{1,20}$/.test(tg.trim()) || add.isPending}
                     onClick={() => add.mutate()}
                 >
-                    Add
+                    Add to allowlist
                 </Button>
             </div>
-            {list.data?.map((a) => (
-                <div
-                    key={a.telegramId}
-                    className="flex items-center justify-between text-sm"
-                >
-                    <span>
-                        <Mono>{a.telegramId}</Mono>
-                        {a.note && (
-                            <span className="text-[var(--hint)]">
-                                {" "}
-                                · {a.note}
-                            </span>
-                        )}
-                    </span>
-                    <Button
-                        variant="ghost"
-                        disabled={remove.isPending}
-                        onClick={() => {
-                            if (
-                                confirm(
-                                    `Remove ${a.telegramId} from the allowlist?`,
-                                )
-                            )
-                                remove.mutate(a.telegramId);
-                        }}
+            <div className="flex flex-wrap gap-2">
+                {list.data?.map((a) => (
+                    <span
+                        key={a.telegramId}
+                        className="inline-flex h-[34px] items-center gap-2 rounded-full border border-[var(--line)] pr-1.5 pl-3.5 text-sm tnum"
                     >
-                        Remove
-                    </Button>
-                </div>
-            ))}
+                        <span>
+                            {a.telegramId}
+                            {a.note && (
+                                <span className="text-[var(--hint)]">
+                                    {" "}
+                                    · {a.note}
+                                </span>
+                            )}
+                        </span>
+                        <button
+                            aria-label={`Remove ${a.telegramId}`}
+                            className="h-6 w-6 cursor-pointer rounded-full bg-[var(--muted-soft)] text-[13px] font-semibold text-[var(--soft)] disabled:opacity-50"
+                            disabled={remove.isPending}
+                            onClick={() => {
+                                if (
+                                    confirm(
+                                        `Remove ${a.telegramId} from the allowlist?`,
+                                    )
+                                )
+                                    remove.mutate(a.telegramId);
+                            }}
+                        >
+                            ×
+                        </button>
+                    </span>
+                ))}
+            </div>
             {list.data?.length === 0 && <Hint>No invited IDs.</Hint>}
             <ErrorText error={list.error || add.error || remove.error} />
         </Card>
@@ -183,65 +377,102 @@ function UserDetail({ u }: { u: AdminUser }) {
     const addVault = useAction({
         mutationFn: (_, key) =>
             api(`/admin/users/${u.id}/vaults`, { method: "POST", key }),
-        onSuccess: () =>
-            qc.invalidateQueries({ queryKey: ["admin-vaults", u.id] }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ["admin-vaults", u.id] });
+            qc.invalidateQueries({ queryKey: ["admin-users"] }); // vault count
+        },
     });
+    const H =
+        "mb-2 text-xs font-semibold tracking-wider text-[var(--hint)] uppercase";
 
     return (
-        <div className="space-y-4 border-t border-[var(--line)] pt-3">
-            <div className="text-sm text-[var(--hint)]">
-                User ID <Mono>{u.id}</Mono> · vault limit {u.maxVaults}
+        <div className="space-y-5 tnum">
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <div className="display text-xl font-semibold">
+                        {name(u)}
+                    </div>
+                    <div className="mt-0.5 text-xs text-[var(--hint)]">
+                        tg {u.telegramId} · user ID <Mono>{u.id}</Mono>
+                    </div>
+                </div>
+                <Pill tone={u.isBlocked ? "bad" : "good"}>
+                    {u.isBlocked ? "Blocked" : "Active"}
+                </Pill>
             </div>
 
+            {pf.isLoading && <Hint>Loading…</Hint>}
             {pf.data && (
-                <div className="space-y-2">
-                    <div className="text-sm">
-                        Balance{" "}
-                        <b className="tnum">
-                            ${fmtUsd(pf.data.totalBalanceUsd)}
-                        </b>{" "}
-                        · earned{" "}
-                        <span className="tnum">
-                            ${fmtUsd(pf.data.accruedYieldUsd)}
-                        </span>
-                        {pf.data.projectedApyBps !== null && (
-                            <> · projected {bpsPct(pf.data.projectedApyBps)}</>
+                <>
+                    <div className="grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--line)]">
+                        <div className="bg-[var(--card)] p-3">
+                            <div className="text-xs text-[var(--hint)]">
+                                Balance
+                            </div>
+                            <div className="mt-0.5 font-semibold">
+                                ${fmtUsd(pf.data.totalBalanceUsd)}
+                            </div>
+                        </div>
+                        <div className="bg-[var(--card)] p-3">
+                            <div className="text-xs text-[var(--hint)]">
+                                Earned
+                            </div>
+                            <div className="mt-0.5 font-semibold text-[var(--good)]">
+                                ${fmtUsd(pf.data.accruedYieldUsd)}
+                            </div>
+                        </div>
+                        <div className="bg-[var(--card)] p-3">
+                            <div className="text-xs text-[var(--hint)]">
+                                Projected
+                            </div>
+                            <div className="mt-0.5 font-semibold">
+                                {pf.data.projectedApyBps === null
+                                    ? "–"
+                                    : bpsPct(pf.data.projectedApyBps)}
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 className={H}>Positions</h3>
+                        {pf.data.lots.map((l) => (
+                            <div
+                                key={l.lotId}
+                                className="flex justify-between border-b border-[var(--row)] py-2 text-sm last:border-b-0"
+                            >
+                                <span>
+                                    {l.pool}
+                                    {l.maturesAt && (
+                                        <span className="text-[var(--hint)]">
+                                            {" "}
+                                            · until{" "}
+                                            {new Date(
+                                                l.maturesAt,
+                                            ).toLocaleDateString()}
+                                        </span>
+                                    )}
+                                </span>
+                                <span className="font-semibold">
+                                    ${fmtUsd(l.valueUsd)}
+                                </span>
+                            </div>
+                        ))}
+                        {pf.data.lots.length === 0 && (
+                            <Hint>No positions.</Hint>
                         )}
                     </div>
-                    {pf.data.lots.map((l) => (
-                        <div
-                            key={l.lotId}
-                            className="flex justify-between text-sm tnum"
-                        >
-                            <span>
-                                {l.pool}
-                                {l.maturesAt && (
-                                    <span className="text-[var(--hint)]">
-                                        {" "}
-                                        · until{" "}
-                                        {new Date(
-                                            l.maturesAt,
-                                        ).toLocaleDateString()}
-                                    </span>
-                                )}
-                            </span>
-                            <span>${fmtUsd(l.valueUsd)}</span>
-                        </div>
-                    ))}
-                    {pf.data.lots.length === 0 && <Hint>No positions.</Hint>}
-                </div>
+                </>
             )}
             <ErrorText error={pf.error} />
 
             <div className="space-y-2">
-                <h3 className="font-medium">Vaults</h3>
+                <h3 className={H}>Vaults · limit {u.maxVaults}</h3>
                 {vaults.data?.map((v) => (
                     <VaultRow key={v.id} v={v} userId={u.id} />
                 ))}
                 <ErrorText error={vaults.error} />
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 border-t border-[var(--line)] pt-4">
                 <Button
                     variant="ghost"
                     disabled={addVault.isPending}
@@ -257,6 +488,7 @@ function UserDetail({ u }: { u: AdminUser }) {
                     Add vault
                 </Button>
                 <Button
+                    className="ml-auto"
                     variant={u.isBlocked ? "ghost" : "danger"}
                     disabled={block.isPending}
                     onClick={() => {
@@ -270,7 +502,7 @@ function UserDetail({ u }: { u: AdminUser }) {
                             block.mutate();
                     }}
                 >
-                    {u.isBlocked ? "Unblock" : "Block"}
+                    {u.isBlocked ? "Unblock user" : "Block user"}
                 </Button>
             </div>
             <ErrorText error={block.error || addVault.error} />
@@ -311,16 +543,20 @@ function VaultRow({ v, userId }: { v: AdminVault; userId: string }) {
     });
 
     return (
-        <div className="space-y-2 rounded-lg border border-[var(--line)] p-3">
+        <div className="space-y-2.5 rounded-xl border border-[var(--line)] p-3">
             <div className="flex items-center justify-between text-sm">
                 <span>
-                    <b>{v.chainName}</b> · nonce {v.nonce}
+                    <b>{v.chainName}</b>{" "}
+                    <span className="text-[var(--hint)]">
+                        · nonce {v.nonce}
+                    </span>
                 </span>
                 <Badge status={v.isDeployed ? "deployed" : "not deployed"} />
             </div>
             <Mono>{v.address}</Mono>
             <div className="flex flex-wrap gap-2">
                 <Button
+                    size="sm"
                     variant="ghost"
                     disabled={bal.isPending}
                     onClick={() => bal.mutate()}
@@ -329,6 +565,7 @@ function VaultRow({ v, userId }: { v: AdminVault; userId: string }) {
                 </Button>
                 {!v.isDeployed && (
                     <Button
+                        size="sm"
                         variant="ghost"
                         disabled={batch.isPending}
                         onClick={() => batch.mutate()}
@@ -338,6 +575,7 @@ function VaultRow({ v, userId }: { v: AdminVault; userId: string }) {
                 )}
                 {!v.isDeployed && (
                     <Button
+                        size="sm"
                         variant="ghost"
                         onClick={() => setMode(mode ? "" : "deployed")}
                     >

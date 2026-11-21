@@ -3,7 +3,16 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, useAction } from "../lib/api";
 import { formatUnits } from "../lib/money";
 import type { AdminChain, AdminDeposit, AdminTransfer } from "../lib/types";
-import { Button, Card, ErrorText, Hint, Input, Mono } from "../components/ui";
+import {
+    Button,
+    Card,
+    ErrorText,
+    Hint,
+    Input,
+    Mono,
+    Select,
+    Warn,
+} from "../components/ui";
 
 const OPEN = ["intent", "transfer_detected"];
 
@@ -30,9 +39,11 @@ export function Transfers() {
     const deps = deposits.data ?? [];
 
     return (
-        <div className="space-y-4">
+        <div className="flex flex-col gap-4">
             <div>
-                <h2 className="font-medium">Unmatched transfers</h2>
+                <h2 className="display text-[17px] font-semibold">
+                    Unmatched transfers
+                </h2>
                 <Hint>
                     Incoming transfers to user vaults that could not be matched
                     to a single open deposit intent.
@@ -82,14 +93,14 @@ function TransferRow({
         onSuccess: onDone,
     });
     return (
-        <Card className="space-y-2">
-            <div className="flex justify-between text-sm">
-                <b className="tnum">
+        <Card className="space-y-3">
+            <div className="flex flex-wrap justify-between gap-2">
+                <b className="display text-lg tnum">
                     {asset
                         ? `${formatUnits(t.amount, asset.decimals, 2)} ${asset.symbol}`
                         : `${t.amount} (raw)`}
                 </b>
-                <span className="text-[var(--hint)]">
+                <span className="text-sm text-[var(--hint)]">
                     {new Date(t.createdAt).toLocaleString()}
                 </span>
             </div>
@@ -104,16 +115,17 @@ function TransferRow({
                 </div>
             )}
             {candidates.length === 0 ? (
-                <Hint>
+                <Warn>
                     No open intent for this vault. Check the user's deposits or
                     reach out to them.
-                </Hint>
+                </Warn>
             ) : (
-                <div className="flex gap-2">
-                    <select
+                <div className="flex flex-wrap gap-2">
+                    <Select
+                        aria-label="Match to intent"
                         value={pick}
                         onChange={(e) => setPick(e.target.value)}
-                        className="flex-1 rounded-lg border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-sm"
+                        className="min-w-0 flex-1"
                     >
                         <option value="">Match to intent…</option>
                         {candidates.map((c) => (
@@ -127,7 +139,7 @@ function TransferRow({
                                 {c.symbol}
                             </option>
                         ))}
-                    </select>
+                    </Select>
                     <Button
                         disabled={!pick || match.isPending}
                         onClick={() => match.mutate()}
@@ -166,25 +178,28 @@ function Ingest({
         },
     });
     return (
-        <Card className="space-y-2">
-            <h3 className="font-medium">Add a transfer by transaction hash</h3>
+        <Card className="space-y-3">
+            <h3 className="display text-[17px] font-semibold">
+                Add a transfer by transaction hash
+            </h3>
             <Hint>
                 Use it when the scanner missed a transfer. The server verifies
                 it onchain before recording it.
             </Hint>
             <div className="flex flex-wrap gap-2">
-                <select
+                <Select
+                    aria-label="Chain"
                     value={chainId || chains[0]?.id || ""}
                     onChange={(e) => setChainId(e.target.value)}
-                    className="rounded-lg border border-[var(--line)] bg-[var(--bg)] px-3 py-2 text-sm"
                 >
                     {chains.map((c) => (
                         <option key={c.id} value={c.id}>
                             {c.name}
                         </option>
                     ))}
-                </select>
+                </Select>
                 <Input
+                    aria-label="Transaction hash"
                     placeholder="0x…"
                     value={hash}
                     onChange={(e) => setHash(e.target.value)}

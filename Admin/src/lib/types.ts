@@ -160,6 +160,8 @@ export interface AdminUser {
     isBlocked: boolean;
     maxVaults: number;
     createdAt: string;
+    balanceUsd: string; // micro-USD, current value of open positions
+    vaultCount: number; // active vaults
 }
 
 export interface AdminVault {

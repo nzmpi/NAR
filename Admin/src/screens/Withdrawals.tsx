@@ -11,6 +11,7 @@ import {
     Hint,
     Input,
     Mono,
+    Segmented,
 } from "../components/ui";
 
 const FILTERS = ["pending", "paid", "rejected", "cancelled", "all"] as const;
@@ -32,21 +33,19 @@ export function Withdrawals() {
 
     return (
         <div className="space-y-4">
-            <div className="flex gap-1">
-                {FILTERS.map((f) => (
-                    <button
-                        key={f}
-                        onClick={() => setFilter(f)}
-                        className={`rounded-full px-3 py-1 text-sm ${f === filter ? "bg-[var(--btn)] text-[var(--btn-fg)]" : "text-[var(--hint)]"}`}
-                    >
-                        {f}
-                    </button>
-                ))}
-            </div>
+            <Segmented
+                label="Withdrawal status"
+                value={filter}
+                onChange={setFilter}
+                options={FILTERS.map((f) => ({
+                    id: f,
+                    label: f[0].toUpperCase() + f.slice(1),
+                }))}
+            />
             {q.isLoading && <Hint>Loading…</Hint>}
             <ErrorText error={q.error} />
             {q.data?.length === 0 && <Hint>Nothing here.</Hint>}
-            <div className="space-y-3">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,360px),1fr))] items-start gap-3">
                 {q.data?.map((r) => (
                     <Row
                         key={r.withdrawal.id}
@@ -104,38 +103,38 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
             : `${r.symbol} (see net USD)`;
 
     return (
-        <Card className="space-y-2">
-            <div className="flex items-center justify-between">
-                <div className="font-medium">
-                    {who}{" "}
-                    <span className="text-[var(--hint)] font-normal text-sm">
-                        · {new Date(w.createdAt).toLocaleString()}
-                    </span>
+        <Card className="space-y-3 !p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                    <div className="font-semibold">{who}</div>
+                    <div className="text-xs text-[var(--hint)]">
+                        {new Date(w.createdAt).toLocaleString()}
+                    </div>
                 </div>
                 <Badge status={w.status} />
             </div>
-            <dl className="grid grid-cols-2 gap-2 text-sm tnum sm:grid-cols-4">
+            <dl className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-x-3 gap-y-2 text-sm tnum">
                 <div>
-                    <dt className="text-[var(--hint)]">Gross</dt>
+                    <dt className="text-xs text-[var(--hint)]">Gross</dt>
                     <dd>${fmtUsd(w.grossAmountUsd)}</dd>
                 </div>
                 <div>
-                    <dt className="text-[var(--hint)]">Early fee</dt>
+                    <dt className="text-xs text-[var(--hint)]">Early fee</dt>
                     <dd>${fmtUsd(w.earlyFeeUsd)}</dd>
                 </div>
                 <div>
-                    <dt className="text-[var(--hint)]">Net (quoted)</dt>
-                    <dd>${fmtUsd(w.netPayoutUsd)}</dd>
+                    <dt className="text-xs text-[var(--hint)]">Net (quoted)</dt>
+                    <dd className="font-semibold">${fmtUsd(w.netPayoutUsd)}</dd>
                 </div>
                 <div>
-                    <dt className="text-[var(--hint)]">Send</dt>
+                    <dt className="text-xs text-[var(--hint)]">Send</dt>
                     <dd>{payout}</dd>
                 </div>
             </dl>
             <div className="text-sm">
-                <span className="text-[var(--hint)]">
-                    To (chain {r.chainId}):{" "}
-                </span>
+                <div className="text-xs text-[var(--hint)]">
+                    To (chain {r.chainId})
+                </div>
                 <Mono>{w.destinationAddress}</Mono>
             </div>
             {w.txHash && (
@@ -151,7 +150,7 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
             )}
 
             {w.status === "pending" && mode === "" && (
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                     <Button onClick={() => setMode("pay")}>Mark paid…</Button>
                     <Button variant="danger" onClick={() => setMode("reject")}>
                         Reject…
@@ -159,7 +158,7 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
                 </div>
             )}
             {mode === "pay" && (
-                <div className="space-y-2 rounded-lg border border-[var(--line)] p-3">
+                <div className="space-y-3 rounded-xl border border-[var(--line)] bg-[var(--bg)] p-4">
                     <Hint>
                         Send the funds first, then enter the transaction hash.
                         Final amounts use the settled pool price, so the paid
@@ -200,7 +199,7 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
                 </div>
             )}
             {mode === "reject" && (
-                <div className="space-y-2 rounded-lg border border-[var(--line)] p-3">
+                <div className="space-y-3 rounded-xl border border-[var(--line)] bg-[var(--bg)] p-4">
                     <Input
                         placeholder="Reason shown to the user"
                         value={reason}

@@ -12,6 +12,7 @@ import {
     recordTransfer,
 } from "../src/services/depositIntents.js";
 import { settleManual } from "../src/services/settlement.js";
+import { adminListUsers, getPortfolio } from "../src/services/queries.js";
 
 const U = 1_000_000n;
 const ok = (c: unknown, m: string) => {
@@ -350,5 +351,37 @@ await settleManual(db, {
     now: day(366),
 });
 ok(true, "<10% NAV move needs no confirmation");
+{
+    const listed = await adminListUsers(db);
+    ok(
+        listed.some((x) => x.balanceUsd > 0n),
+        "user list has a non-zero balance",
+    );
+    for (const u of [alice, bob]) {
+        const row = listed.find((x) => x.id === u.id)!;
+        const pf = await getPortfolio(db, u.id);
+        ok(
+            row.balanceUsd === pf.totalBalanceUsd,
+            `user list balance matches portfolio (tg ${u.telegramId})`,
+        );
+    }
+    const [v] = await db
+        .select({ userId: s.vaults.userId })
+        .from(s.vaults)
+        .where(eq(s.vaults.isActive, true))
+        .limit(1);
+    if (v) {
+        const n = (
+            await db
+                .select()
+                .from(s.vaults)
+                .where(eq(s.vaults.userId, v.userId))
+        ).filter((x) => x.isActive).length;
+        ok(
+            listed.find((x) => x.id === v.userId)!.vaultCount === n,
+            "user list vault count matches active vaults",
+        );
+    }
+}
 console.log("integration ok");
 process.exit(0);
