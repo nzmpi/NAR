@@ -33,6 +33,7 @@ export async function api<T>(
             method,
             headers,
             credentials: "include",
+            cache: "no-store", // admin data must never come from the HTTP cache
             body:
                 opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
         });

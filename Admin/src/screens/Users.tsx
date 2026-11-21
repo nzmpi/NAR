@@ -11,7 +11,6 @@ import type {
     VaultBalances,
 } from "../lib/types";
 import {
-    Badge,
     Button,
     Card,
     ErrorText,
@@ -23,7 +22,7 @@ import {
     Select,
     TD,
     TH,
-    Onchain,
+    explorerUrl,
 } from "../components/ui";
 
 const STATUS = [
@@ -148,6 +147,12 @@ export function Users() {
                             )}
                         </div>
                     </div>
+                    {users.some((x) => x.balanceUsd === undefined) && (
+                        <div className="border-b border-[var(--line)] bg-[var(--warn-soft)] px-5 py-2.5 text-sm text-[var(--warn)]">
+                            The API is an older version without balances and
+                            vault counts. Redeploy the backend to see them.
+                        </div>
+                    )}
                     {q.isLoading && (
                         <div className="p-5">
                             <Hint>Loading…</Hint>
@@ -473,9 +478,10 @@ function UserDetail({ u }: { u: AdminUser }) {
 
             <div className="space-y-2">
                 <h3 className={H}>Vaults · limit {u.maxVaults}</h3>
-                {vaults.data?.map((v) => (
-                    <VaultRow key={v.id} v={v} userId={u.id} />
+                {groupVaults(vaults.data ?? []).map((g) => (
+                    <VaultGroup key={g.address} g={g} userId={u.id} />
                 ))}
+                {vaults.data?.length === 0 && <Hint>No vaults yet.</Hint>}
                 <ErrorText error={vaults.error} />
             </div>
 
@@ -517,6 +523,66 @@ function UserDetail({ u }: { u: AdminUser }) {
     );
 }
 
+// One vault address per nonce, deployed on each chain separately (CREATE2).
+type Group = {
+    address: string;
+    nonce: number;
+    deployed: AdminVault[];
+    pending: AdminVault[];
+};
+function groupVaults(list: AdminVault[]): Group[] {
+    const by = new Map<string, Group>();
+    for (const v of list) {
+        const k = v.address.toLowerCase();
+        const g = by.get(k) ?? {
+            address: v.address,
+            nonce: v.nonce,
+            deployed: [],
+            pending: [],
+        };
+        (v.isDeployed ? g.deployed : g.pending).push(v);
+        by.set(k, g);
+    }
+    const byChain = (a: AdminVault, b: AdminVault) =>
+        a.chainName.localeCompare(b.chainName);
+    return [...by.values()]
+        .map((g) => ({
+            ...g,
+            deployed: g.deployed.sort(byChain),
+            pending: g.pending.sort(byChain),
+        }))
+        .sort((a, b) => a.nonce - b.nonce);
+}
+
+function VaultGroup({ g, userId }: { g: Group; userId: string }) {
+    const Sub = ({ label, list }: { label: string; list: AdminVault[] }) =>
+        list.length ? (
+            <div>
+                <div className="px-3 pt-2 pb-1 text-[11px] font-semibold tracking-wider text-[var(--hint)] uppercase">
+                    {label} · {list.length}
+                </div>
+                {list.map((v) => (
+                    <VaultRow key={v.id} v={v} userId={userId} />
+                ))}
+            </div>
+        ) : null;
+    return (
+        <div className="overflow-hidden rounded-xl border border-[var(--line)]">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--line)] bg-[var(--bg)] px-3 py-2.5">
+                <span className="text-sm font-semibold">Nonce {g.nonce}</span>
+                <span
+                    className="font-mono text-xs break-all"
+                    title="Same address on every chain"
+                >
+                    {g.address}
+                </span>
+            </div>
+            <Sub label="Deployed" list={g.deployed} />
+            <Sub label="Not deployed" list={g.pending} />
+        </div>
+    );
+}
+
 function VaultRow({ v, userId }: { v: AdminVault; userId: string }) {
     const qc = useQueryClient();
     const [hash, setHash] = useState("");
@@ -550,18 +616,23 @@ function VaultRow({ v, userId }: { v: AdminVault; userId: string }) {
     });
 
     return (
-        <div className="space-y-2.5 rounded-xl border border-[var(--line)] p-3">
-            <div className="flex items-center justify-between text-sm">
-                <span>
-                    <b>{v.chainName}</b>{" "}
-                    <span className="text-[var(--hint)]">
-                        · nonce {v.nonce}
-                    </span>
+        <div className="space-y-2 border-t border-[var(--row)] px-3 py-2 first:border-t-0">
+            <div className="flex flex-wrap items-center gap-2">
+                <span className="flex-1 text-sm font-medium">
+                    {explorerUrl(v.address, v.chainId) ? (
+                        <a
+                            href={explorerUrl(v.address, v.chainId)!}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[var(--link)] hover:underline"
+                            title={`Open ${v.chainName} explorer`}
+                        >
+                            {v.chainName} ↗
+                        </a>
+                    ) : (
+                        v.chainName
+                    )}
                 </span>
-                <Badge status={v.isDeployed ? "deployed" : "not deployed"} />
-            </div>
-            <Onchain value={v.address} chainId={v.chainId} />
-            <div className="flex flex-wrap gap-2">
                 <Button
                     size="sm"
                     variant="ghost"

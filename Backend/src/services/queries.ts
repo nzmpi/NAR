@@ -313,7 +313,9 @@ export function adminListWithdrawals(database: Database, status?: string) {
 }
 
 // Users with their current balance (same valuation as getPortfolio) and
-// active vault count, so the admin list can filter without a call per user.
+// vault count, so the admin list can filter without a call per user.
+// A vault is one address (nonce) deployed per chain, so count distinct
+// nonces: that is what maxVaults limits.
 export async function adminListUsers(database: Database) {
     const list = await database
         .select()
@@ -347,16 +349,16 @@ export async function adminListUsers(database: Database) {
         );
     }
     const vaultRows = await database
-        .select({ userId: vaults.userId })
+        .select({ userId: vaults.userId, nonce: vaults.nonce })
         .from(vaults)
         .where(and(inArray(vaults.userId, ids), eq(vaults.isActive, true)));
-    const vaultCount = new Map<string, number>();
+    const nonces = new Map<string, Set<number>>();
     for (const v of vaultRows)
-        vaultCount.set(v.userId, (vaultCount.get(v.userId) ?? 0) + 1);
+        nonces.set(v.userId, (nonces.get(v.userId) ?? new Set()).add(v.nonce));
     return list.map((u) => ({
         ...u,
         balanceUsd: balance.get(u.id) ?? 0n,
-        vaultCount: vaultCount.get(u.id) ?? 0,
+        vaultCount: nonces.get(u.id)?.size ?? 0,
     }));
 }
 
