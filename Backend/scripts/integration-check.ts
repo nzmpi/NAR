@@ -365,23 +365,26 @@ ok(true, "<10% NAV move needs no confirmation");
             `user list balance matches portfolio (tg ${u.telegramId})`,
         );
     }
-    const [v] = await db
-        .select({ userId: s.vaults.userId })
-        .from(s.vaults)
-        .where(eq(s.vaults.isActive, true))
-        .limit(1);
-    if (v) {
-        const n = (
-            await db
-                .select()
-                .from(s.vaults)
-                .where(eq(s.vaults.userId, v.userId))
-        ).filter((x) => x.isActive).length;
-        ok(
-            listed.find((x) => x.id === v.userId)!.vaultCount === n,
-            "user list vault count matches active vaults",
-        );
-    }
+    // Same address (nonce 0) on a second chain is still one vault.
+    const [chain2] = await db
+        .insert(s.chains)
+        .values({ name: "Base", chainId: 8453 })
+        .returning();
+    await db.insert(s.vaults).values({
+        userId: alice.id,
+        chainId: chain2.id,
+        address: "0xa",
+        isDeployed: false,
+    });
+    const again = await adminListUsers(db);
+    ok(
+        again.find((x) => x.id === alice.id)!.vaultCount === 1,
+        "vault count is per address, not per chain",
+    );
+    ok(
+        again.find((x) => x.id === bob.id)!.vaultCount === 1,
+        "user with one vault counts one",
+    );
 }
 console.log("integration ok");
 process.exit(0);

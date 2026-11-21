@@ -260,6 +260,13 @@ const EXPLORERS: Record<number, string> = {
     137: "https://polygonscan.com",
 };
 
+export function explorerUrl(value: string, chainId?: number) {
+    const base = chainId === undefined ? undefined : EXPLORERS[chainId];
+    if (!base) return null;
+    const kind = /^0x[0-9a-fA-F]{64}$/.test(value) ? "tx" : "address";
+    return `${base}/${kind}/${value}`;
+}
+
 // An address or tx hash, linked to its explorer page when the chain is known.
 export function Onchain({
     value,
@@ -270,10 +277,9 @@ export function Onchain({
     chainId?: number;
     short?: boolean;
 }) {
-    const base = chainId === undefined ? undefined : EXPLORERS[chainId];
-    const kind = /^0x[0-9a-fA-F]{64}$/.test(value) ? "tx" : "address";
+    const url = explorerUrl(value, chainId);
     const text = short ? `${value.slice(0, 6)}…${value.slice(-4)}` : value;
-    if (!base)
+    if (!url)
         return (
             <span className="font-mono text-xs break-all" title={value}>
                 {text}
@@ -281,7 +287,7 @@ export function Onchain({
         );
     return (
         <a
-            href={`${base}/${kind}/${value}`}
+            href={url}
             target="_blank"
             rel="noopener noreferrer"
             title={`Open on explorer: ${value}`}
