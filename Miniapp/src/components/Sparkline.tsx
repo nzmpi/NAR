@@ -1,10 +1,12 @@
-export function Sparkline({ values }: { values: number[] }) {
+export function Sparkline({
+    values,
+    stroke,
+}: {
+    values: number[];
+    stroke?: string;
+}) {
     if (values.length < 2)
-        return (
-            <p className="text-sm text-[var(--hint)]">
-                Not enough history yet.
-            </p>
-        );
+        return <p className="text-sm opacity-80">Not enough history yet.</p>;
     const min = Math.min(...values),
         max = Math.max(...values);
     const span = max - min || 1;
@@ -28,7 +30,7 @@ export function Sparkline({ values }: { values: number[] }) {
             <polyline
                 points={pts}
                 fill="none"
-                stroke={up ? "var(--good)" : "var(--bad)"}
+                stroke={stroke ?? (up ? "var(--good)" : "var(--bad)")}
                 strokeWidth="2"
                 vectorEffect="non-scaling-stroke"
             />
