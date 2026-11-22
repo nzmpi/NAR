@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, newKey } from "../lib/api";
-import { fmtUsd, formatUnits, parseUnits } from "../lib/money";
+import { bpsPct, fmtUsd, formatUnits, parseUnits } from "../lib/money";
+import { fromBps, splitBps, type AllocMode } from "../lib/alloc";
 import {
     POOL_APY_BPS,
     POOL_LABEL,
@@ -11,8 +12,20 @@ import {
     type PoolKey,
     type Vault,
 } from "../lib/types";
-import { bpsPct } from "../lib/money";
-import { Button, Card, ErrorText, Hint, StatusBadge } from "../components/ui";
+import {
+    Button,
+    Card,
+    Chip,
+    ErrorText,
+    Field,
+    Header,
+    Hint,
+    Input,
+    Segmented,
+    Select,
+    StatusBadge,
+    TIER_COLOR,
+} from "../components/ui";
 
 const MIN_USD = 50;
 const ACTIVE = [
@@ -21,8 +34,18 @@ const ACTIVE = [
     "awaiting_user_approval",
     "ready_to_activate",
 ];
+const LOCK_NOTE: Record<string, string> = {
+    liquid: "Withdraw any time",
+    lock_1m: "Locked 1 month",
+    lock_2m: "Locked 2 months",
+    lock_3m: "Locked 3 months",
+    manager: "Not in your total · no lock",
+};
 
 type DepositPool = PoolKey | "manager";
+// "Base Sepolia · USDC · …7f3a": chain, token, end of the token contract.
+const assetLabel = (a: Asset) =>
+    `${a.chainName} · ${a.symbol} · …${a.tokenAddress.slice(-4)}`;
 
 export function Deposit() {
     const assets = useQuery({
@@ -44,32 +67,24 @@ export function Deposit() {
     const err = assets.error || vaults.error || intents.error;
     if (err) return <ErrorText error={err} />;
 
-    const list = intents.data!;
-    const active = list.filter((i) => ACTIVE.includes(i.status));
-    const past = list.filter((i) => !ACTIVE.includes(i.status)).slice(0, 5);
+    // Past deposits live in History; only ones still in flight show here.
+    const active = intents.data!.filter((i) => ACTIVE.includes(i.status));
     const ctx = { assets: assets.data!, vaults: vaults.data! };
 
     return (
-        <div className="space-y-4">
+        <div className="flex flex-col gap-3">
+            <Header title="Deposit">
+                <span className="opacity-90">
+                    Earn up to 10% a year · minimum ${MIN_USD}
+                </span>
+            </Header>
             {active.map((i) => (
                 <IntentCard key={i.id} intent={i} {...ctx} />
             ))}
-            <NewDeposit {...ctx} />
-            {past.length > 0 && (
-                <div>
-                    <h2 className="font-medium mb-2">Recent</h2>
-                    <div className="space-y-2">
-                        {past.map((i) => (
-                            <IntentCard
-                                key={i.id}
-                                intent={i}
-                                {...ctx}
-                                compact
-                            />
-                        ))}
-                    </div>
-                </div>
+            {active.length > 0 && (
+                <h2 className="display mt-2 text-xl font-bold">New deposit</h2>
             )}
+            <NewDeposit {...ctx} />
         </div>
     );
 }
@@ -79,6 +94,14 @@ function NewDeposit({ assets, vaults }: { assets: Asset[]; vaults: Vault[] }) {
     const key = useRef(newKey());
     const [assetId, setAssetId] = useState(assets[0]?.assetId ?? "");
     const [amount, setAmount] = useState("");
+    const [mode, setMode] = useState<AllocMode>("pct");
+    const [raw, setRaw] = useState<Record<DepositPool, string>>({
+        liquid: "100",
+        lock_1m: "",
+        lock_2m: "",
+        lock_3m: "",
+        manager: "",
+    });
     const me = useQuery({
         queryKey: ["me"],
         queryFn: () => api<{ id: string; isAdmin?: boolean }>("/me"),
@@ -86,13 +109,6 @@ function NewDeposit({ assets, vaults }: { assets: Asset[]; vaults: Vault[] }) {
     const pools: DepositPool[] = me.data?.isAdmin
         ? [...USER_POOLS, "manager"]
         : USER_POOLS;
-    const [alloc, setAlloc] = useState<Record<DepositPool, string>>({
-        liquid: "100",
-        lock_1m: "",
-        lock_2m: "",
-        lock_3m: "",
-        manager: "",
-    });
 
     const asset = assets.find((a) => a.assetId === assetId);
     const vault =
@@ -105,15 +121,26 @@ function NewDeposit({ assets, vaults }: { assets: Asset[]; vaults: Vault[] }) {
         asset &&
         units !== null &&
         units >= BigInt(MIN_USD) * 10n ** BigInt(asset.decimals);
-    const parts = pools.map((p) => ({
-        pool: p,
-        pct: Number(alloc[p] || 0),
-    }));
-    const total = parts.reduce((s, x) => s + x.pct, 0);
-    const valid = parts.every(
-        (x) => Number.isInteger(x.pct) && x.pct >= 0 && x.pct <= 100,
+    // Stablecoins only, so the token amount is the dollar amount.
+    const amt = Number(amount.replace(",", ".")) || 0;
+    const bps = splitBps(
+        pools.map((p) => raw[p]),
+        mode,
+        amt,
     );
-    const canSubmit = !!asset && !!vault && !!usdOk && valid && total === 100;
+    const total = bps.reduce((s, b) => s + b, 0);
+    const left = 10000 - total;
+    const canSubmit = !!asset && !!vault && !!usdOk && total === 10000;
+
+    const setTier = (p: DepositPool, b: number) =>
+        setRaw({ ...raw, [p]: fromBps(Math.max(0, b), mode, amt) });
+    const switchMode = (m: AllocMode) => {
+        // Keep the split, show it in the other unit.
+        const next = { ...raw };
+        pools.forEach((p, i) => (next[p] = fromBps(bps[i], m, amt)));
+        setRaw(next);
+        setMode(m);
+    };
 
     const create = useMutation({
         mutationFn: () =>
@@ -124,9 +151,9 @@ function NewDeposit({ assets, vaults }: { assets: Asset[]; vaults: Vault[] }) {
                     vaultId: vault!.id,
                     assetId,
                     intendedAmount: units!.toString(),
-                    allocations: parts
-                        .filter((x) => x.pct > 0)
-                        .map((x) => ({ pool: x.pool, bps: x.pct * 100 })),
+                    allocations: pools
+                        .map((p, i) => ({ pool: p, bps: bps[i] }))
+                        .filter((x) => x.bps > 0),
                 },
             }),
         onSuccess: () => {
@@ -144,95 +171,202 @@ function NewDeposit({ assets, vaults }: { assets: Asset[]; vaults: Vault[] }) {
             </Card>
         );
 
+    const leftText =
+        left === 0
+            ? amt > 0
+                ? `All $${fmtUsd(BigInt(Math.round(amt * 1e6)))} allocated`
+                : "100% allocated"
+            : left > 0
+              ? `${bpsPct(left)} left to allocate`
+              : `Over by ${bpsPct(-left)}`;
+
     return (
-        <Card className="space-y-3">
-            <h2 className="font-medium">New deposit</h2>
-            <label className="block">
-                <Hint>Network and token</Hint>
-                <select
-                    value={assetId}
-                    onChange={(e) => setAssetId(e.target.value)}
-                    className="w-full mt-1 rounded-xl p-3 bg-[var(--bg)]"
+        <>
+            <Card className="flex flex-col gap-3.5">
+                <Field label="Network and token">
+                    <Select
+                        value={assetId}
+                        onChange={(e) => setAssetId(e.target.value)}
+                    >
+                        {assets.map((a) => (
+                            <option key={a.assetId} value={a.assetId}>
+                                {assetLabel(a)}
+                            </option>
+                        ))}
+                    </Select>
+                </Field>
+                <Field label={`Amount · minimum $${MIN_USD}`}>
+                    <span className="flex h-14 items-center rounded-[14px] border-2 border-[var(--accent)] bg-[var(--field)] px-4">
+                        <span className="display text-2xl text-[var(--hint)]">
+                            $
+                        </span>
+                        <input
+                            inputMode="decimal"
+                            value={amount}
+                            onChange={(e) => setAmount(e.target.value)}
+                            placeholder="100"
+                            aria-label="Amount"
+                            className="display min-w-0 flex-1 bg-transparent pl-1 text-2xl font-semibold outline-none"
+                        />
+                    </span>
+                </Field>
+            </Card>
+
+            <Card className="flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-2.5">
+                    <h2 className="text-[15px] font-semibold">
+                        Split between tiers
+                    </h2>
+                    <Segmented
+                        label="Enter in"
+                        className="w-[96px]"
+                        options={[
+                            { id: "usd", label: "$" },
+                            { id: "pct", label: "%" },
+                        ]}
+                        value={mode}
+                        onChange={switchMode}
+                    />
+                </div>
+                <div
+                    aria-hidden="true"
+                    className="flex h-2 overflow-hidden rounded-full bg-[var(--track)]"
                 >
-                    {assets.map((a) => (
-                        <option key={a.assetId} value={a.assetId}>
-                            {a.chainName} · {a.symbol}
-                        </option>
-                    ))}
-                </select>
-            </label>
-            <label className="block">
-                <Hint>Amount (minimum ${MIN_USD})</Hint>
-                <input
-                    inputMode="decimal"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="100"
-                    className="w-full mt-1 rounded-xl p-3 bg-[var(--bg)] tnum"
-                />
-            </label>
-            <div>
-                <Hint>Split between tiers (whole percent, must total 100)</Hint>
-                <div className="space-y-2 mt-1">
-                    {pools.map((p) => (
-                        <div key={p} className="flex items-center gap-3">
-                            <span className="flex-1">
-                                {p === "manager" ? (
-                                    <>
-                                        Manager{" "}
-                                        <span className="text-[var(--hint)]">
-                                            · admin only
-                                        </span>
-                                    </>
-                                ) : (
-                                    <>
-                                        {POOL_LABEL[p]}{" "}
-                                        <span className="text-[var(--hint)]">
-                                            · {bpsPct(POOL_APY_BPS[p])}
-                                        </span>
-                                    </>
-                                )}
-                            </span>
-                            <input
-                                inputMode="numeric"
-                                value={alloc[p]}
-                                onChange={(e) =>
-                                    setAlloc({
-                                        ...alloc,
-                                        [p]: e.target.value
-                                            .replace(/\D/g, "")
-                                            .slice(0, 3),
-                                    })
-                                }
-                                placeholder="0"
-                                className="w-20 rounded-xl p-2 bg-[var(--bg)] text-right tnum"
-                            />
-                            <span className="text-[var(--hint)]">%</span>
-                        </div>
+                    {pools.map((p, i) => (
+                        <div
+                            key={p}
+                            style={{
+                                width: `${Math.min(100, bps[i] / 100)}%`,
+                                background: TIER_COLOR[p],
+                            }}
+                        />
                     ))}
                 </div>
                 <div
-                    className="text-sm mt-2"
+                    className="text-[13px] font-semibold"
                     style={{
-                        color: total === 100 ? "var(--good)" : "var(--warn)",
+                        color:
+                            left === 0
+                                ? "var(--good)"
+                                : left > 0
+                                  ? "var(--warn)"
+                                  : "var(--bad)",
                     }}
                 >
-                    Total {total}%
+                    {leftText}
+                    {mode === "usd" && !amt && " · enter the amount first"}
                 </div>
-                <p className="text-xs text-[var(--hint)] mt-1">
-                    Locked tiers pay more but charge a 10% fee on early
-                    withdrawal.
+
+                {pools.map((p, i) => {
+                    const others = total - bps[i];
+                    const mgr = p === "manager";
+                    return (
+                        <div
+                            key={p}
+                            className={`flex flex-col gap-2.5 rounded-[14px] p-3 ${mgr ? "border-[1.5px] border-dashed border-[var(--mgr)]" : "border border-[var(--line)]"}`}
+                            style={
+                                bps[i] && !mgr
+                                    ? {
+                                          borderColor: `color-mix(in srgb, ${TIER_COLOR[p]} 45%, var(--line))`,
+                                      }
+                                    : undefined
+                            }
+                        >
+                            <div className="flex items-center gap-2.5">
+                                <span
+                                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                                    style={{ background: TIER_COLOR[p] }}
+                                />
+                                <span className="min-w-0 flex-1">
+                                    <span className="block font-semibold">
+                                        {mgr
+                                            ? "Manager · admin only"
+                                            : `${POOL_LABEL[p]} · ${bpsPct(POOL_APY_BPS[p])}`}
+                                    </span>
+                                    <span className="block text-xs text-[var(--hint)]">
+                                        {LOCK_NOTE[p]}
+                                    </span>
+                                </span>
+                                <span className="flex h-10 w-[118px] items-center rounded-[12px] border border-[var(--line)] bg-[var(--field)] px-3">
+                                    {mode === "usd" && (
+                                        <span className="text-[var(--hint)]">
+                                            $
+                                        </span>
+                                    )}
+                                    <input
+                                        inputMode="decimal"
+                                        value={raw[p]}
+                                        onChange={(e) =>
+                                            setRaw({
+                                                ...raw,
+                                                [p]: e.target.value,
+                                            })
+                                        }
+                                        placeholder="0"
+                                        aria-label={`${mgr ? "Manager" : POOL_LABEL[p]} ${mode === "usd" ? "amount in USD" : "percent"}`}
+                                        className="min-w-0 flex-1 bg-transparent text-right text-[15px] font-semibold outline-none"
+                                    />
+                                    {mode === "pct" && (
+                                        <span className="text-[var(--hint)]">
+                                            %
+                                        </span>
+                                    )}
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                {(
+                                    [
+                                        ["25%", 2500],
+                                        ["50%", 5000],
+                                        ["75%", 7500],
+                                        ["Rest", 10000 - others],
+                                    ] as const
+                                ).map(([label, b], j, all) => (
+                                    <Chip
+                                        key={label}
+                                        // Light only the first chip that matches.
+                                        on={
+                                            bps[i] > 0 &&
+                                            all.findIndex(
+                                                (c) => c[1] === bps[i],
+                                            ) === j
+                                        }
+                                        onClick={() => setTier(p, b)}
+                                        className="px-2.5"
+                                    >
+                                        {label}
+                                    </Chip>
+                                ))}
+                                <span className="ml-auto text-xs text-[var(--hint)]">
+                                    {mode === "usd"
+                                        ? bpsPct(bps[i])
+                                        : amt
+                                          ? `$${fmtUsd(BigInt(Math.round(((amt * bps[i]) / 10000) * 1e6)))}`
+                                          : ""}
+                                </span>
+                            </div>
+                        </div>
+                    );
+                })}
+                <p className="text-xs text-[var(--hint)]">
+                    Locked tiers pay more but charge a{" "}
+                    <span className="font-semibold text-[var(--bad)]">
+                        10% fee
+                    </span>{" "}
+                    if you withdraw early.
                 </p>
-            </div>
+            </Card>
+
             <ErrorText error={create.error} />
             <Button
+                size="lg"
                 className="w-full"
                 disabled={!canSubmit || create.isPending}
                 onClick={() => create.mutate()}
             >
-                {create.isPending ? "Creating…" : "Get deposit address"}
+                {create.isPending ? "Creating…" : "Get deposit address →"}
             </Button>
-        </Card>
+        </>
     );
 }
 
@@ -240,12 +374,10 @@ function IntentCard({
     intent: i,
     assets,
     vaults,
-    compact,
 }: {
     intent: Intent;
     assets: Asset[];
     vaults: Vault[];
-    compact?: boolean;
 }) {
     const qc = useQueryClient();
     const [hash, setHash] = useState("");
@@ -301,43 +433,30 @@ function IntentCard({
     const sym = asset?.symbol ?? "";
     const intended = formatUnits(i.intendedAmount, dec, 2);
 
-    if (compact) {
-        return (
-            <Card className="flex justify-between items-center">
-                <span className="tnum">
-                    {intended} {sym}
-                </span>
-                <StatusBadge status={i.status} />
-            </Card>
-        );
-    }
-
     return (
-        <Card className="space-y-3">
-            <div className="flex justify-between items-center">
-                <span className="font-medium tnum">
-                    {intended} {sym}
+        <Card className="flex flex-col gap-3.5">
+            <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold">
+                    {intended} {sym} deposit
                 </span>
                 <StatusBadge status={i.status} />
             </div>
 
             {i.status === "intent" && vault && asset && (
                 <>
-                    <p className="text-sm">
+                    <p>
                         Send{" "}
-                        <b className="tnum">
+                        <b>
                             {intended} {sym}
                         </b>{" "}
                         on <b>{asset.chainName}</b> to this address. Use only
-                        this network and token. Valid until{" "}
-                        {new Date(i.expiresAt).toLocaleString()}.
+                        this network and token.
                     </p>
-                    <div className="rounded-xl bg-[var(--bg)] p-3 break-all text-sm font-mono">
+                    <div className="rounded-xl bg-[var(--bg)] px-3.5 py-3 font-mono text-[13px] break-all">
                         {vault.address}
                     </div>
                     <Button
                         variant="ghost"
-                        className="w-full"
                         onClick={() =>
                             navigator.clipboard
                                 ?.writeText(vault.address)
@@ -346,31 +465,32 @@ function IntentCard({
                     >
                         Copy address
                     </Button>
-                    {!vault.isDeployed && (
-                        <p className="text-xs text-[var(--hint)]">
-                            Your vault is created when your deposit is
-                            processed. It is safe to send before that.
-                        </p>
-                    )}
+                    <p className="text-xs text-[var(--hint)]">
+                        Valid until {new Date(i.expiresAt).toLocaleString()}.
+                        {!vault.isDeployed &&
+                            " Your vault is created when the deposit is processed; it is safe to send before that."}
+                    </p>
                     <Button
-                        className="w-full"
+                        className="h-[60px] text-[17px]"
                         disabled={check.isPending}
                         onClick={() => check.mutate()}
                     >
                         {check.isPending ? "Checking…" : "I sent it"}
                     </Button>
-                    <details className="text-sm">
-                        <summary className="text-[var(--link)] cursor-pointer">
+                    <details className="text-[13px]">
+                        <summary className="cursor-pointer font-medium text-[var(--link)]">
                             Not detected? Enter the transaction hash
                         </summary>
-                        <div className="flex gap-2 mt-2">
-                            <input
+                        <div className="mt-2.5 flex gap-2">
+                            <Input
                                 value={hash}
                                 onChange={(e) => setHash(e.target.value)}
                                 placeholder="0x…"
-                                className="flex-1 min-w-0 rounded-xl p-2 bg-[var(--bg)] font-mono text-xs"
+                                aria-label="Transaction hash"
+                                className="!h-10 font-mono !text-xs"
                             />
                             <Button
+                                className="!h-10"
                                 disabled={
                                     !/^0x[a-fA-F0-9]{64}$/.test(hash.trim()) ||
                                     attach.isPending
@@ -381,32 +501,29 @@ function IntentCard({
                             </Button>
                         </div>
                     </details>
-                    <Button
-                        variant="danger"
-                        className="w-full"
+                    <button
+                        className="cursor-pointer self-end py-1 text-[13px] font-semibold text-[var(--bad)] disabled:opacity-50"
                         disabled={cancel.isPending}
                         onClick={() => cancel.mutate()}
                     >
                         Cancel deposit
-                    </Button>
+                    </button>
                 </>
             )}
 
             {i.status === "transfer_detected" && (
-                <p className="text-sm">
-                    We see your transfer. It will be confirmed shortly.
-                </p>
+                <p>We see your transfer. It will be confirmed shortly.</p>
             )}
 
             {i.status === "awaiting_user_approval" && (
                 <>
-                    <p className="text-sm">
+                    <p>
                         You planned{" "}
-                        <b className="tnum">
+                        <b>
                             {intended} {sym}
                         </b>{" "}
                         but{" "}
-                        <b className="tnum">
+                        <b>
                             {i.confirmedAmount
                                 ? formatUnits(i.confirmedAmount, dec, 2)
                                 : "?"}{" "}
@@ -419,7 +536,7 @@ function IntentCard({
                         . Approve to continue with the received amount.
                     </p>
                     <Button
-                        className="w-full"
+                        className="h-[60px] text-[17px]"
                         disabled={approve.isPending}
                         onClick={() => approve.mutate()}
                     >
@@ -429,7 +546,7 @@ function IntentCard({
             )}
 
             {i.status === "ready_to_activate" && (
-                <p className="text-sm">
+                <p>
                     Funds confirmed. Your deposit starts earning once it is
                     activated.
                 </p>

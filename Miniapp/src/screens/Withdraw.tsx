@@ -2,37 +2,44 @@ import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, newKey } from "../lib/api";
 import { fmtUsd, formatUnits, parseUnits } from "../lib/money";
+import { POOL_LABEL, type Lot, type WithdrawalQuote } from "../lib/types";
+import { useAssets, usePayoutAddresses, usePortfolio } from "../lib/queries";
 import {
-    POOL_LABEL,
-    type Lot,
-    type WithdrawalQuote,
-    type WithdrawalRow,
-} from "../lib/types";
-import {
-    useAssets,
-    usePayoutAddresses,
-    usePortfolio,
-    useWithdrawals,
-} from "../lib/queries";
-import { Button, Card, ErrorText, Hint, StatusBadge } from "../components/ui";
+    Button,
+    Card,
+    Chip,
+    ErrorText,
+    Field,
+    Header,
+    Hint,
+    Input,
+    Select,
+    TIER_COLOR,
+} from "../components/ui";
 
 const MIN_MICRO = 5_000_000n;
 const ADDRESS = /^0x[a-fA-F0-9]{40}$/;
 const avail = (l: Lot) => BigInt(l.valueUsd) - BigInt(l.reservedUsd);
 const isActiveLock = (l: Lot) =>
     l.pool !== "liquid" && !!l.maturesAt && new Date(l.maturesAt) > new Date();
+const shortDate = (s: string) =>
+    new Date(s).toLocaleDateString(undefined, {
+        day: "numeric",
+        month: "short",
+    });
 
 export function Withdraw() {
     const qc = useQueryClient();
     const pf = usePortfolio();
     const assets = useAssets();
     const saved = usePayoutAddresses();
-    const history = useWithdrawals();
     const key = useRef(newKey());
 
     const [assetId, setAssetId] = useState("");
     const [dest, setDest] = useState("");
     const [amount, setAmount] = useState("");
+    // Locked picks are automatic until the user edits one.
+    const [manual, setManual] = useState(false);
     const [sel, setSel] = useState<Record<string, string>>({}); // lotId -> usd text
     const [max, setMax] = useState<Record<string, boolean>>({});
     const [quote, setQuote] = useState<WithdrawalQuote | null>(null);
@@ -44,11 +51,11 @@ export function Withdraw() {
 
     const lots = pf.data!.lots;
     const manager = BigInt(pf.data!.managerAvailableUsd);
+    const liquidOnly = lots
+        .filter((l) => l.pool === "liquid")
+        .reduce((s, l) => s + avail(l), 0n);
     // Fee-free now: liquid plus manager funds (admins only).
-    const liquid =
-        lots
-            .filter((l) => l.pool === "liquid")
-            .reduce((s, l) => s + avail(l), 0n) + manager;
+    const liquid = liquidOnly + manager;
     const lockLots = lots
         .filter((l) => l.pool !== "liquid" && avail(l) > 0n)
         .sort(
@@ -56,6 +63,7 @@ export function Withdraw() {
                 Number(isActiveLock(a)) - Number(isActiveLock(b)) ||
                 (a.maturesAt ?? "").localeCompare(b.maturesAt ?? ""),
         );
+    const lockedTotal = lockLots.reduce((s, l) => s + avail(l), 0n);
     const assetList = assets.data!;
     const asset = assetList.find(
         (a) => a.assetId === (assetId || assetList[0]?.assetId),
@@ -66,8 +74,23 @@ export function Withdraw() {
         amountMicro !== null && amountMicro > liquid
             ? amountMicro - liquid
             : 0n;
+
+    // Soonest-unlocking positions first, each taken in full before the next.
+    const auto: Record<string, bigint> = {};
+    let left = remainder;
+    for (const l of lockLots) {
+        if (left <= 0n) break;
+        auto[l.lotId] = left < avail(l) ? left : avail(l);
+        left -= auto[l.lotId];
+    }
+    const isMax = (l: Lot) =>
+        manual ? !!max[l.lotId] : auto[l.lotId] === avail(l);
     const selMicro = (l: Lot) =>
-        max[l.lotId] ? avail(l) : (parseUnits(sel[l.lotId] ?? "", 6) ?? 0n);
+        manual
+            ? max[l.lotId]
+                ? avail(l)
+                : (parseUnits(sel[l.lotId] ?? "", 6) ?? 0n)
+            : (auto[l.lotId] ?? 0n);
     const lockSum = lockLots.reduce((s, l) => s + selMicro(l), 0n);
     const exceeds = lockLots.some((l) => selMicro(l) > avail(l));
     const addrOk = ADDRESS.test(dest.trim());
@@ -78,28 +101,32 @@ export function Withdraw() {
         amountMicro >= MIN_MICRO &&
         !exceeds &&
         lockSum === remainder &&
-        amountMicro <= liquid + lockLots.reduce((s, l) => s + avail(l), 0n);
+        amountMicro <= liquid + lockedTotal;
 
     const edit = (fn: () => void) => {
         fn();
         setQuote(null);
         setDone("");
     };
-
-    const autoFill = () =>
+    // First manual edit starts from the automatic picks.
+    const editLot = (l: Lot, text: string | null) =>
         edit(() => {
-            let left = remainder;
-            const s: Record<string, string> = {},
-                m: Record<string, boolean> = {};
-            for (const l of lockLots) {
-                if (left <= 0n) break;
-                const take = left < avail(l) ? left : avail(l);
-                if (take === avail(l)) m[l.lotId] = true;
-                else s[l.lotId] = formatUnits(take, 6, 6);
-                left -= take;
+            const s: Record<string, string> = manual ? { ...sel } : {};
+            const m: Record<string, boolean> = manual ? { ...max } : {};
+            if (!manual)
+                for (const x of lockLots) {
+                    if (auto[x.lotId] === avail(x)) m[x.lotId] = true;
+                    else if (auto[x.lotId])
+                        s[x.lotId] = formatUnits(auto[x.lotId], 6, 6);
+                }
+            if (text === null) m[l.lotId] = true;
+            else {
+                m[l.lotId] = false;
+                s[l.lotId] = text;
             }
             setSel(s);
             setMax(m);
+            setManual(true);
         });
 
     const body = () => ({
@@ -109,7 +136,7 @@ export function Withdraw() {
         lockSelections: lockLots
             .filter((l) => selMicro(l) > 0n && remainder > 0n)
             .map((l) =>
-                max[l.lotId]
+                isMax(l)
                     ? { lotId: l.lotId, max: true }
                     : { lotId: l.lotId, grossUsd: selMicro(l).toString() },
             ),
@@ -136,8 +163,9 @@ export function Withdraw() {
             setAmount("");
             setSel({});
             setMax({});
+            setManual(false);
             setDone(
-                "Request submitted. You will get a message here when it is paid.",
+                "Request submitted. You will get a message here when it is paid. You can follow or cancel it in History.",
             );
             for (const k of ["portfolio", "withdrawals"])
                 qc.invalidateQueries({ queryKey: [k] });
@@ -145,49 +173,63 @@ export function Withdraw() {
     });
 
     return (
-        <div className="space-y-4">
-            <Card className="space-y-3">
-                <h2 className="font-medium">Withdraw</h2>
-                <Hint>
-                    Available now: ${fmtUsd(liquid)}{" "}
-                    {manager > 0n ? "liquid and manager" : "liquid"}
-                    {lockLots.length > 0 && " + locked positions"}.
-                </Hint>
+        <div className="flex flex-col gap-3">
+            <Header title="Withdraw">
+                <span className="text-[13px] opacity-85">
+                    Available now, no fee
+                </span>
+                <span className="display text-4xl leading-none font-bold">
+                    ${fmtUsd(liquid)}
+                </span>
+                {manager > 0n && (
+                    <span className="flex flex-wrap gap-1.5">
+                        <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-semibold">
+                            Liquid ${fmtUsd(liquidOnly)}
+                        </span>
+                        <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-semibold">
+                            Manager ${fmtUsd(manager)} · admin
+                        </span>
+                    </span>
+                )}
+                {lockedTotal > 0n && (
+                    <span className="opacity-90">
+                        + ${fmtUsd(lockedTotal)} in locked positions
+                    </span>
+                )}
+            </Header>
 
-                <label className="block">
-                    <Hint>Receive on</Hint>
-                    <select
+            <Card className="flex flex-col gap-3.5">
+                <Field label="Receive on">
+                    <Select
                         value={asset?.assetId ?? ""}
                         onChange={(e) => edit(() => setAssetId(e.target.value))}
-                        className="w-full mt-1 rounded-xl p-3 bg-[var(--bg)]"
                     >
                         {assetList.map((a) => (
                             <option key={a.assetId} value={a.assetId}>
-                                {a.chainName} · {a.symbol}
+                                {a.chainName} · {a.symbol} · …
+                                {a.tokenAddress.slice(-4)}
                             </option>
                         ))}
-                    </select>
-                </label>
-
-                <label className="block">
-                    <Hint>Your wallet address on that network</Hint>
-                    <input
+                    </Select>
+                </Field>
+                <Field label="Your wallet address on that network">
+                    <Input
                         value={dest}
                         onChange={(e) => edit(() => setDest(e.target.value))}
                         placeholder="0x…"
-                        className="w-full mt-1 rounded-xl p-3 bg-[var(--bg)] font-mono text-xs"
+                        className="font-mono !text-[13px]"
                     />
-                </label>
+                </Field>
                 {(saved.data?.length ?? 0) > 0 && (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="-mt-1.5 flex flex-wrap gap-1.5">
                         {saved.data!.slice(0, 3).map((a) => (
-                            <button
+                            <Chip
                                 key={a.address}
                                 onClick={() => edit(() => setDest(a.address))}
-                                className="text-xs rounded-full border border-[var(--hint)]/40 px-2 py-1 font-mono"
+                                className="font-mono"
                             >
                                 {a.address.slice(0, 6)}…{a.address.slice(-4)}
-                            </button>
+                            </Chip>
                         ))}
                     </div>
                 )}
@@ -196,249 +238,189 @@ export function Withdraw() {
                         Not a valid address.
                     </p>
                 )}
-
-                <label className="block">
-                    <Hint>Amount in USD (minimum $5)</Hint>
-                    <input
-                        inputMode="decimal"
-                        value={amount}
-                        onChange={(e) => edit(() => setAmount(e.target.value))}
-                        placeholder="100"
-                        className="w-full mt-1 rounded-xl p-3 bg-[var(--bg)] tnum"
-                    />
-                </label>
-
-                {remainder > 0n && (
-                    <div className="space-y-2">
-                        <p className="text-sm text-[var(--warn)]">
-                            ${fmtUsd(remainder)} must come from locked
-                            positions. Early withdrawals from an active lock
-                            cost 10%.
-                        </p>
-                        <Button variant="ghost" onClick={autoFill}>
-                            Choose positions automatically
-                        </Button>
-                        {lockLots.map((l) => (
-                            <div
-                                key={l.lotId}
-                                className="rounded-xl bg-[var(--bg)] p-3 space-y-1"
-                            >
-                                <div className="flex justify-between text-sm">
-                                    <span>
-                                        {POOL_LABEL[l.pool]} ·{" "}
-                                        {isActiveLock(l)
-                                            ? "locked"
-                                            : "unlocked"}
-                                    </span>
-                                    <span className="tnum text-[var(--hint)]">
-                                        up to ${fmtUsd(avail(l))}
-                                    </span>
-                                </div>
-                                <div className="flex gap-2">
-                                    <input
-                                        inputMode="decimal"
-                                        value={
-                                            max[l.lotId]
-                                                ? formatUnits(avail(l), 6, 6)
-                                                : (sel[l.lotId] ?? "")
-                                        }
-                                        onChange={(e) =>
-                                            edit(() => {
-                                                setMax({
-                                                    ...max,
-                                                    [l.lotId]: false,
-                                                });
-                                                setSel({
-                                                    ...sel,
-                                                    [l.lotId]: e.target.value,
-                                                });
-                                            })
-                                        }
-                                        placeholder="0"
-                                        className="flex-1 min-w-0 rounded-lg p-2 bg-[var(--bg2)] tnum"
-                                    />
-                                    <Button
-                                        variant="ghost"
-                                        className="!py-2"
-                                        onClick={() =>
-                                            edit(() =>
-                                                setMax({
-                                                    ...max,
-                                                    [l.lotId]: true,
-                                                }),
-                                            )
-                                        }
-                                    >
-                                        Max
-                                    </Button>
-                                </div>
-                            </div>
-                        ))}
-                        <div
-                            className="text-sm tnum"
-                            style={{
-                                color:
-                                    lockSum === remainder
-                                        ? "var(--good)"
-                                        : "var(--warn)",
-                            }}
+                <Field label="Amount in USD · minimum $5">
+                    <span className="flex h-14 items-center rounded-[14px] border-2 border-[var(--accent)] bg-[var(--field)] px-4">
+                        <span className="display text-2xl text-[var(--hint)]">
+                            $
+                        </span>
+                        <input
+                            inputMode="decimal"
+                            value={amount}
+                            onChange={(e) =>
+                                edit(() => {
+                                    setAmount(e.target.value);
+                                    setManual(false);
+                                })
+                            }
+                            placeholder="100"
+                            aria-label="Amount in USD"
+                            className="display min-w-0 flex-1 bg-transparent pl-1 text-2xl font-semibold outline-none"
+                        />
+                        <Chip
+                            onClick={() =>
+                                edit(() => {
+                                    setAmount(
+                                        formatUnits(
+                                            liquid + lockedTotal,
+                                            6,
+                                            2,
+                                        ).replaceAll(",", ""),
+                                    );
+                                    setManual(false);
+                                })
+                            }
                         >
-                            Selected ${fmtUsd(lockSum)} of ${fmtUsd(remainder)}
-                        </div>
-                    </div>
-                )}
-
-                <ErrorText error={preview.error || submit.error} />
-                {!quote && (
-                    <Button
-                        className="w-full"
-                        disabled={!valid || preview.isPending}
-                        onClick={() => preview.mutate()}
-                    >
-                        {preview.isPending
-                            ? "Calculating…"
-                            : "Review withdrawal"}
-                    </Button>
-                )}
+                            Max
+                        </Chip>
+                    </span>
+                </Field>
             </Card>
 
-            {quote && asset && (
-                <Card className="space-y-2">
-                    <h3 className="font-medium">Review</h3>
-                    <Row k="Amount" v={`$${fmtUsd(quote.grossUsd)}`} />
-                    <Row
-                        k="Early withdrawal fee (10%)"
-                        v={`-$${fmtUsd(quote.feeUsd)}`}
-                        bad={BigInt(quote.feeUsd) > 0n}
-                    />
-                    <Row
-                        k="You receive"
-                        v={`${formatUnits(quote.payoutAmount, asset.decimals, 2)} ${asset.symbol}`}
-                        bold
-                    />
-                    <p className="text-xs text-[var(--hint)]">
-                        Final amounts use the pool price when the payment is
-                        made and can differ slightly. The fee is fixed at the
-                        time you confirm.
+            {remainder > 0n && (
+                <Card className="flex flex-col gap-3">
+                    <p className="rounded-xl bg-[var(--warn-soft)] px-3 py-2.5 font-medium text-[var(--warn)]">
+                        ${fmtUsd(remainder)} must come from locked positions.
+                        Early withdrawal from an active lock costs 10%.
                     </p>
+                    {lockLots.map((l) => (
+                        <div
+                            key={l.lotId}
+                            className="flex items-center gap-3 rounded-[14px] border border-[var(--line)] p-3"
+                        >
+                            <span
+                                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                                style={{ background: TIER_COLOR[l.pool] }}
+                            />
+                            <span className="min-w-0 flex-1">
+                                <span className="block font-semibold">
+                                    {POOL_LABEL[l.pool]} ·{" "}
+                                    {isActiveLock(l) ? "locked" : "unlocked"}
+                                </span>
+                                <span className="block text-xs text-[var(--hint)]">
+                                    up to ${fmtUsd(avail(l))}
+                                    {l.maturesAt &&
+                                        isActiveLock(l) &&
+                                        ` · unlocks ${shortDate(l.maturesAt)}`}
+                                </span>
+                            </span>
+                            <input
+                                inputMode="decimal"
+                                value={
+                                    isMax(l)
+                                        ? formatUnits(
+                                              avail(l),
+                                              6,
+                                              2,
+                                          ).replaceAll(",", "")
+                                        : manual
+                                          ? (sel[l.lotId] ?? "")
+                                          : auto[l.lotId]
+                                            ? formatUnits(
+                                                  auto[l.lotId],
+                                                  6,
+                                                  2,
+                                              ).replaceAll(",", "")
+                                            : ""
+                                }
+                                onChange={(e) => editLot(l, e.target.value)}
+                                placeholder="0"
+                                aria-label={`Amount from ${POOL_LABEL[l.pool]}`}
+                                className="h-9 w-20 rounded-[10px] border border-[var(--line)] bg-[var(--field)] px-2 text-right font-semibold"
+                            />
+                            <Chip
+                                on={isMax(l)}
+                                onClick={() => editLot(l, null)}
+                            >
+                                Max
+                            </Chip>
+                        </div>
+                    ))}
+                    <div
+                        className="text-[13px] font-semibold"
+                        style={{
+                            color:
+                                lockSum === remainder
+                                    ? "var(--good)"
+                                    : "var(--warn)",
+                        }}
+                    >
+                        {manual
+                            ? `Selected $${fmtUsd(lockSum)} of $${fmtUsd(remainder)}`
+                            : "Picked automatically, soonest unlock first."}
+                    </div>
+                </Card>
+            )}
+
+            <ErrorText error={preview.error || submit.error} />
+            {!quote && (
+                <Button
+                    size="lg"
+                    className="w-full"
+                    disabled={!valid || preview.isPending}
+                    onClick={() => preview.mutate()}
+                >
+                    {preview.isPending ? "Calculating…" : "Review withdrawal →"}
+                </Button>
+            )}
+
+            {quote && asset && (
+                <>
+                    <Card className="flex flex-col gap-2">
+                        <h2 className="mb-1 text-[15px] font-semibold">
+                            Review
+                        </h2>
+                        <Row k="Amount" v={`$${fmtUsd(quote.grossUsd)}`} />
+                        <Row
+                            k="Early withdrawal fee (10%)"
+                            v={
+                                BigInt(quote.feeUsd) > 0n
+                                    ? `−$${fmtUsd(quote.feeUsd)}`
+                                    : "$0.00"
+                            }
+                            bad={BigInt(quote.feeUsd) > 0n}
+                        />
+                        <div className="flex justify-between border-t border-[var(--row)] pt-2 font-semibold">
+                            <span>You receive</span>
+                            <span className="display text-lg">
+                                {formatUnits(
+                                    quote.payoutAmount,
+                                    asset.decimals,
+                                    2,
+                                )}{" "}
+                                {asset.symbol}
+                            </span>
+                        </div>
+                        <p className="text-xs text-[var(--hint)]">
+                            Final amounts use the pool price when the payment is
+                            made and can differ slightly. The fee is fixed at
+                            the time you confirm.
+                        </p>
+                    </Card>
                     <Button
+                        size="lg"
                         className="w-full"
                         disabled={submit.isPending}
                         onClick={() => submit.mutate()}
                     >
                         {submit.isPending
                             ? "Submitting…"
-                            : "Confirm withdrawal"}
+                            : "Confirm withdrawal →"}
                     </Button>
-                    <Button
-                        variant="ghost"
-                        className="w-full"
-                        onClick={() => setQuote(null)}
-                    >
+                    <Button variant="ghost" onClick={() => setQuote(null)}>
                         Back
                     </Button>
-                </Card>
+                </>
             )}
             {done && <p className="text-sm text-[var(--good)]">{done}</p>}
-
-            <WithdrawalList rows={history.data ?? []} assets={assetList} />
         </div>
     );
 }
 
-const Row = ({
-    k,
-    v,
-    bold,
-    bad,
-}: {
-    k: string;
-    v: string;
-    bold?: boolean;
-    bad?: boolean;
-}) => (
-    <div
-        className={`flex justify-between text-sm ${bold ? "font-semibold" : ""}`}
-    >
+const Row = ({ k, v, bad }: { k: string; v: string; bad?: boolean }) => (
+    <div className="flex justify-between">
         <span className="text-[var(--hint)]">{k}</span>
-        <span
-            className="tnum"
-            style={bad ? { color: "var(--bad)" } : undefined}
-        >
+        <span className={bad ? "font-semibold text-[var(--bad)]" : undefined}>
             {v}
         </span>
     </div>
 );
-
-function WithdrawalList({
-    rows,
-    assets,
-}: {
-    rows: WithdrawalRow[];
-    assets: { assetId: string; symbol: string; decimals: number }[];
-}) {
-    const qc = useQueryClient();
-    const cancel = useMutation({
-        mutationFn: (id: string) =>
-            api(`/me/withdrawals/${id}/cancel`, { method: "POST" }),
-        onSuccess: () => {
-            for (const k of ["portfolio", "withdrawals"])
-                qc.invalidateQueries({ queryKey: [k] });
-        },
-    });
-    if (!rows.length) return null;
-    return (
-        <div>
-            <h2 className="font-medium mb-2">Your withdrawals</h2>
-            <div className="space-y-2">
-                {rows.slice(0, 10).map((w) => {
-                    const a = assets.find((x) => x.assetId === w.assetId);
-                    return (
-                        <Card key={w.id} className="space-y-1">
-                            <div className="flex justify-between items-center">
-                                <span className="tnum">
-                                    ${fmtUsd(w.grossAmountUsd)}
-                                </span>
-                                <StatusBadge status={w.status} />
-                            </div>
-                            <div className="text-xs text-[var(--hint)]">
-                                {new Date(w.createdAt).toLocaleString()} · net{" "}
-                                {a
-                                    ? formatUnits(
-                                          w.payoutAmount,
-                                          a.decimals,
-                                          2,
-                                      ) +
-                                      " " +
-                                      a.symbol
-                                    : "$" + fmtUsd(w.netPayoutUsd)}
-                            </div>
-                            {w.status === "rejected" && w.rejectionReason && (
-                                <div className="text-sm text-[var(--bad)]">
-                                    {w.rejectionReason}
-                                </div>
-                            )}
-                            {w.status === "pending" && w.lockedAt && (
-                                <div className="text-xs text-[var(--hint)]">
-                                    Payout in progress. It can no longer be
-                                    cancelled.
-                                </div>
-                            )}
-                            {w.status === "pending" && !w.lockedAt && (
-                                <Button
-                                    variant="danger"
-                                    className="w-full !py-2"
-                                    disabled={cancel.isPending}
-                                    onClick={() => cancel.mutate(w.id)}
-                                >
-                                    Cancel request
-                                </Button>
-                            )}
-                        </Card>
-                    );
-                })}
-            </div>
-            <ErrorText error={cancel.error} />
-        </div>
-    );
-}

@@ -2,15 +2,19 @@ import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, newKey } from "../lib/api";
 import { bpsPct, fmtUsd, formatUnits, parseUnits } from "../lib/money";
+import { POOL_APY_BPS, POOL_LABEL, type Lot, type PoolKey } from "../lib/types";
+import { usePortfolio } from "../lib/queries";
 import {
-    POOL_APY_BPS,
-    POOL_LABEL,
-    type Lot,
-    type PoolKey,
-    type RelockRow,
-} from "../lib/types";
-import { usePortfolio, useRelocks } from "../lib/queries";
-import { Button, Card, ErrorText, Hint, StatusBadge } from "../components/ui";
+    Button,
+    Card,
+    Chip,
+    ErrorText,
+    Header,
+    Hint,
+    Input,
+    TIER_COLOR,
+    TIER_SHORT,
+} from "../components/ui";
 
 type Lock = "lock_1m" | "lock_2m" | "lock_3m";
 const LOCKS: Lock[] = ["lock_1m", "lock_2m", "lock_3m"];
@@ -28,26 +32,22 @@ const targets = (l: Lot): Lock[] =>
 
 export function Relock() {
     const pf = usePortfolio();
-    const rl = useRelocks();
     if (pf.isLoading) return <Hint>Loading…</Hint>;
     if (pf.error) return <ErrorText error={pf.error} />;
     const lots = pf.data!.lots.filter((l) => avail(l) > 0n);
 
     return (
-        <div className="space-y-4">
-            <div>
-                <h2 className="font-medium">Relock</h2>
-                <Hint>
+        <div className="flex flex-col gap-3">
+            <Header title="Relock">
+                <span className="opacity-90">
                     Move money to a longer tier for a higher rate. No fee.
-                    Changes apply at the next settlement and restart the lock
-                    period.
-                </Hint>
-            </div>
+                    Applies at the next settlement and restarts the lock period.
+                </span>
+            </Header>
             {lots.length === 0 && <Hint>Nothing available to relock.</Hint>}
             {lots.map((l) => (
                 <LotRelock key={l.lotId} lot={l} />
             ))}
-            <RelockList rows={rl.data ?? []} />
         </div>
     );
 }
@@ -60,9 +60,11 @@ function LotRelock({ lot }: { lot: Lot }) {
     const [target, setTarget] = useState<Lock | "">(opts[0] ?? "");
     const [amount, setAmount] = useState("");
     const [all, setAll] = useState(false);
+    const [part, setPart] = useState(""); // which quick chip is active
     const micro = all ? avail(lot) : parseUnits(amount, 6);
     const valid =
         !!target && micro !== null && micro > 0n && micro <= avail(lot);
+    const color = TIER_COLOR[lot.pool];
 
     const go = useMutation({
         mutationFn: () =>
@@ -86,62 +88,136 @@ function LotRelock({ lot }: { lot: Lot }) {
             setOpen(false);
             setAmount("");
             setAll(false);
+            setPart("");
             for (const k of ["portfolio", "relocks"])
                 qc.invalidateQueries({ queryKey: [k] });
         },
     });
 
+    // Share of this position, rounded down to whole cents.
+    const pick = (label: string, quarters: number) => {
+        setPart(label);
+        if (quarters === 4) {
+            setAll(true);
+            return;
+        }
+        setAll(false);
+        const v = (avail(lot) * BigInt(quarters)) / 4n;
+        setAmount(formatUnits(v - (v % 10_000n), 6, 2).replaceAll(",", ""));
+    };
+
     return (
-        <Card className="space-y-2">
-            <div className="flex justify-between">
-                <span className="font-medium">{POOL_LABEL[lot.pool]}</span>
-                <span className="tnum">${fmtUsd(avail(lot))}</span>
+        <Card className="flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+                <span
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-current/15 text-xs font-semibold"
+                    style={{ color }}
+                >
+                    {TIER_SHORT[lot.pool]}
+                </span>
+                <span className="flex-1">
+                    <span className="block font-semibold">
+                        {POOL_LABEL[lot.pool]} ·{" "}
+                        {bpsPct(POOL_APY_BPS[lot.pool])}
+                    </span>
+                    <span className="block text-xs text-[var(--hint)]">
+                        {lot.maturesAt
+                            ? `${active(lot) ? "Unlocks" : "Unlocked"} ${new Date(lot.maturesAt).toLocaleDateString()}`
+                            : "No lock"}
+                    </span>
+                </span>
+                <span className="display text-xl font-bold">
+                    ${fmtUsd(avail(lot))}
+                </span>
             </div>
-            <div className="text-sm text-[var(--hint)]">
-                {lot.maturesAt
-                    ? `${active(lot) ? "Unlocks" : "Unlocked"} ${new Date(lot.maturesAt).toLocaleDateString()}`
-                    : "No lock"}
-            </div>
+
             {opts.length === 0 ? (
                 <Hint>Already on the longest tier.</Hint>
             ) : !open ? (
-                <Button
-                    variant="ghost"
-                    className="w-full"
-                    onClick={() => setOpen(true)}
-                >
+                <Button variant="ghost" onClick={() => setOpen(true)}>
                     Relock…
                 </Button>
             ) : (
-                <div className="space-y-2">
-                    <select
-                        value={target}
-                        onChange={(e) => setTarget(e.target.value as Lock)}
-                        className="w-full rounded-xl p-3 bg-[var(--bg)]"
+                <div className="flex flex-col gap-2.5 border-t border-[var(--row)] pt-3">
+                    <span className="text-[13px] text-[var(--hint)]">
+                        Move to
+                    </span>
+                    <div
+                        role="radiogroup"
+                        aria-label="Target tier"
+                        className="grid grid-cols-3 gap-2"
                     >
-                        {opts.map((t) => (
-                            <option key={t} value={t}>
-                                {POOL_LABEL[t]} · {bpsPct(POOL_APY_BPS[t])}
-                            </option>
+                        {opts.map((t) => {
+                            const on = t === target;
+                            return (
+                                <button
+                                    key={t}
+                                    role="radio"
+                                    aria-checked={on}
+                                    onClick={() => setTarget(t)}
+                                    className={`cursor-pointer rounded-[14px] px-1.5 py-2.5 ${on ? "border-2" : "border border-[var(--line)] bg-[var(--card)]"}`}
+                                    style={
+                                        on
+                                            ? {
+                                                  borderColor: TIER_COLOR[t],
+                                                  background: `color-mix(in srgb, ${TIER_COLOR[t]} 12%, transparent)`,
+                                              }
+                                            : undefined
+                                    }
+                                >
+                                    <span className="block font-semibold">
+                                        {POOL_LABEL[t]}
+                                    </span>
+                                    <span className="block text-xs opacity-80">
+                                        {bpsPct(POOL_APY_BPS[t])}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                    <Input
+                        inputMode="decimal"
+                        value={
+                            all
+                                ? formatUnits(avail(lot), 6, 2).replaceAll(
+                                      ",",
+                                      "",
+                                  )
+                                : amount
+                        }
+                        onChange={(e) => {
+                            setAll(false);
+                            setPart("");
+                            setAmount(e.target.value);
+                        }}
+                        placeholder="Amount in USD"
+                        aria-label="Amount in USD"
+                        className="font-semibold"
+                    />
+                    <div className="grid grid-cols-4 gap-1.5">
+                        {(
+                            [
+                                ["25%", 1],
+                                ["50%", 2],
+                                ["75%", 3],
+                                ["Max", 4],
+                            ] as const
+                        ).map(([label, q]) => (
+                            <Chip
+                                key={label}
+                                on={part === label}
+                                onClick={() => pick(label, q)}
+                                className="!h-9 text-[13px]"
+                            >
+                                {label}
+                            </Chip>
                         ))}
-                    </select>
-                    <div className="flex gap-2">
-                        <input
-                            inputMode="decimal"
-                            value={all ? formatUnits(avail(lot), 6, 6) : amount}
-                            onChange={(e) => {
-                                setAll(false);
-                                setAmount(e.target.value);
-                            }}
-                            placeholder="Amount in USD"
-                            className="flex-1 min-w-0 rounded-xl p-3 bg-[var(--bg)] tnum"
-                        />
-                        <Button variant="ghost" onClick={() => setAll(true)}>
-                            Max
-                        </Button>
                     </div>
                     <ErrorText error={go.error} />
                     <div className="flex gap-2">
+                        <Button variant="ghost" onClick={() => setOpen(false)}>
+                            Cancel
+                        </Button>
                         <Button
                             className="flex-1"
                             disabled={!valid || go.isPending}
@@ -149,81 +225,14 @@ function LotRelock({ lot }: { lot: Lot }) {
                         >
                             {go.isPending ? "Queuing…" : "Queue relock"}
                         </Button>
-                        <Button variant="ghost" onClick={() => setOpen(false)}>
-                            Close
-                        </Button>
                     </div>
                 </div>
             )}
+            {go.isSuccess && !open && (
+                <p className="text-sm text-[var(--good)]">
+                    Queued. You can follow or cancel it in History.
+                </p>
+            )}
         </Card>
-    );
-}
-
-function RelockList({ rows }: { rows: RelockRow[] }) {
-    const qc = useQueryClient();
-    const cancel = useMutation({
-        mutationFn: (id: string) =>
-            api(`/me/relocks/${id}/cancel`, { method: "POST" }),
-        onSuccess: () => {
-            for (const k of ["portfolio", "relocks"])
-                qc.invalidateQueries({ queryKey: [k] });
-        },
-    });
-    if (!rows.length) return null;
-    return (
-        <div>
-            <h2 className="font-medium mb-2">Your relocks</h2>
-            <div className="space-y-2">
-                {rows.slice(0, 10).map((r) => (
-                    <Card key={r.id} className="space-y-1">
-                        <div className="flex justify-between items-center">
-                            <span className="text-sm text-[var(--hint)]">
-                                {new Date(r.createdAt).toLocaleDateString()}
-                            </span>
-                            <StatusBadge status={r.status} />
-                        </div>
-                        {r.items.map((i) => (
-                            <div
-                                key={i.id}
-                                className="text-sm flex justify-between"
-                            >
-                                <span>
-                                    →{" "}
-                                    {i.targetPool
-                                        ? POOL_LABEL[i.targetPool]
-                                        : ""}
-                                </span>
-                                <span className="tnum">
-                                    {i.isMax
-                                        ? "all"
-                                        : i.amountUsd
-                                          ? "$" + fmtUsd(i.amountUsd)
-                                          : ""}
-                                </span>
-                            </div>
-                        ))}
-                        {r.items.some((i) => i.failureReason) && (
-                            <div className="text-sm text-[var(--bad)]">
-                                {
-                                    r.items.find((i) => i.failureReason)!
-                                        .failureReason
-                                }
-                            </div>
-                        )}
-                        {r.status === "pending" && (
-                            <Button
-                                variant="danger"
-                                className="w-full !py-2"
-                                disabled={cancel.isPending}
-                                onClick={() => cancel.mutate(r.id)}
-                            >
-                                Cancel
-                            </Button>
-                        )}
-                    </Card>
-                ))}
-            </div>
-            <ErrorText error={cancel.error} />
-        </div>
     );
 }
