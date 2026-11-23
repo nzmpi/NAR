@@ -405,7 +405,7 @@ function NewDeposit({
             >
                 {create.isPending
                     ? "Creating…"
-                    : (need ?? "Get deposit address →")}
+                    : (need ?? "Get deposit address")}
             </Button>
         </>
     );
@@ -555,12 +555,17 @@ function IntentCard({
                         </Button>
                         {/* Offered once the user has said they sent it, even if the check failed. */}
                         {(check.isSuccess || check.isError) && !enterHash && (
-                            <Button
-                                variant="ghost"
-                                onClick={() => setEnterHash(true)}
-                            >
-                                Not detected? Enter the transaction hash
-                            </Button>
+                            <>
+                                <p className="text-sm text-[var(--hint)]">
+                                    Not detected?
+                                </p>
+                                <Button
+                                    variant="ghost"
+                                    onClick={() => setEnterHash(true)}
+                                >
+                                    Enter the transaction hash
+                                </Button>
+                            </>
                         )}
                         {enterHash && (
                             <div className="flex gap-2">

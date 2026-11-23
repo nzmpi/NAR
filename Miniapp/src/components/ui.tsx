@@ -49,7 +49,7 @@ export function Button({
     const v = {
         primary:
             "hero text-white font-bold shadow-[0_8px_20px_rgb(47_91_234/0.25)] disabled:bg-none disabled:bg-[var(--muted-soft)] disabled:text-[var(--hint)] disabled:shadow-none",
-        ghost: "border border-[var(--line)] bg-[var(--card)] font-semibold",
+        ghost: "border border-[color-mix(in_srgb,var(--hint)_50%,transparent)] bg-[var(--card)] font-semibold",
         danger: "border border-[var(--bad)] text-[var(--bad)] font-semibold",
     }[variant];
     const s = size === "lg" ? "h-14 px-5 text-base" : "h-11 px-5 text-sm";

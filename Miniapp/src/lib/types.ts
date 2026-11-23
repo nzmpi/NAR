@@ -86,6 +86,7 @@ export interface Intent {
     expiresAt: string;
     createdAt: string;
     allocations: { pool: PoolKey; bps: number }[];
+    rejectionReason: string | null;
 }
 export interface PayoutAddress {
     address: string;
@@ -117,12 +118,14 @@ export interface WithdrawalRow {
     rejectionReason: string | null;
     txHash: string | null;
     lockedAt: string | null;
+    processedAt: string | null;
     createdAt: string;
 }
 export interface RelockRow {
     id: string;
     status: string;
     createdAt: string;
+    appliedAt: string | null;
     items: {
         id: string;
         targetPool: PoolKey | undefined;
