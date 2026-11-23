@@ -9,7 +9,7 @@ import {
     type Lot,
     type Performance,
 } from "../lib/types";
-import { usePortfolio } from "../lib/queries";
+import { usePortfolio, useRelocks, useWithdrawals } from "../lib/queries";
 import {
     ErrorText,
     Hint,
@@ -88,6 +88,8 @@ export function Home({ go }: { go: (t: Tab) => void }) {
         return () => document.removeEventListener("pointerdown", close);
     }, [tip]);
     const pf = usePortfolio();
+    const wd = useWithdrawals();
+    const rl = useRelocks();
     const perf = useQuery({
         queryKey: ["performance", range],
         queryFn: () => api<Performance>(`/me/performance?range=${range}`),
@@ -101,6 +103,8 @@ export function Home({ go }: { go: (t: Tab) => void }) {
     const when = RANGES.find((r) => r.id === range)!.when;
     const manager = BigInt(p.managerAvailableUsd);
     const pending = p.pendingDeposits;
+    const wdOpen = (wd.data ?? []).filter((w) => w.status === "pending");
+    const rlOpen = (rl.data ?? []).filter((r) => r.status === "pending");
     const cards = tierCards(p.lots);
 
     return (
@@ -169,24 +173,29 @@ export function Home({ go }: { go: (t: Tab) => void }) {
             </header>
 
             {pending.length > 0 && (
-                <button
+                <InProgress
+                    title={count(pending.length, "deposit")}
+                    note={PENDING_TEXT[pending[0].status] ?? "Being confirmed"}
                     onClick={() => go("deposit")}
-                    className="flex cursor-pointer items-center gap-2.5 rounded-2xl border border-[var(--line)] bg-[var(--card)] px-4 py-3.5 text-left"
-                >
-                    <span className="h-2.5 w-2.5 rounded-full bg-[var(--warn)]" />
-                    <span className="flex-1">
-                        <span className="block font-semibold">
-                            {pending.length === 1
-                                ? "1 deposit in progress"
-                                : `${pending.length} deposits in progress`}
-                        </span>
-                        <span className="block text-xs text-[var(--hint)]">
-                            {PENDING_TEXT[pending[0].status] ??
-                                "Being confirmed"}
-                        </span>
-                    </span>
-                    <span className="text-[var(--hint)]">→</span>
-                </button>
+                />
+            )}
+            {wdOpen.length > 0 && (
+                <InProgress
+                    title={count(wdOpen.length, "withdrawal")}
+                    note={
+                        wdOpen.every((w) => w.lockedAt)
+                            ? "Being paid"
+                            : "Waiting for review"
+                    }
+                    onClick={() => go("history")}
+                />
+            )}
+            {rlOpen.length > 0 && (
+                <InProgress
+                    title={count(rlOpen.length, "relock")}
+                    note="Applies at the next settlement"
+                    onClick={() => go("history")}
+                />
             )}
 
             <h2 className="display text-xl font-bold">Your tiers</h2>
@@ -247,3 +256,28 @@ export function Home({ go }: { go: (t: Tab) => void }) {
         </div>
     );
 }
+
+const count = (n: number, what: string) =>
+    `${n} ${what}${n === 1 ? "" : "s"} in progress`;
+
+const InProgress = ({
+    title,
+    note,
+    onClick,
+}: {
+    title: string;
+    note: string;
+    onClick: () => void;
+}) => (
+    <button
+        onClick={onClick}
+        className="flex cursor-pointer items-center gap-2.5 rounded-2xl border border-[var(--line)] bg-[var(--card)] px-4 py-3.5 text-left"
+    >
+        <span className="h-2.5 w-2.5 rounded-full bg-[var(--warn)]" />
+        <span className="flex-1">
+            <span className="block font-semibold">{title}</span>
+            <span className="block text-xs text-[var(--hint)]">{note}</span>
+        </span>
+        <span className="text-[var(--hint)]">→</span>
+    </button>
+);
