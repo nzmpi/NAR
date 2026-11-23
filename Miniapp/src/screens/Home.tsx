@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { bpsPct, fmtUsd, pct } from "../lib/money";
@@ -10,7 +10,13 @@ import {
     type Performance,
 } from "../lib/types";
 import { usePortfolio } from "../lib/queries";
-import { ErrorText, Hint, Segmented, TIER_COLOR } from "../components/ui";
+import {
+    ErrorText,
+    Hint,
+    Segmented,
+    Skeleton,
+    TIER_COLOR,
+} from "../components/ui";
 import { Sparkline } from "../components/Sparkline";
 import type { Tab } from "../App";
 
@@ -71,6 +77,16 @@ function tierCards(lots: Lot[]) {
 export function Home({ go }: { go: (t: Tab) => void }) {
     const [range, setRange] = useState<Range>("1m");
     const [tip, setTip] = useState(false);
+    const tipRef = useRef<HTMLDivElement>(null);
+    // Any tap outside the APY pill or its tip closes the tip.
+    useEffect(() => {
+        if (!tip) return;
+        const close = (e: PointerEvent) => {
+            if (!tipRef.current?.contains(e.target as Node)) setTip(false);
+        };
+        document.addEventListener("pointerdown", close);
+        return () => document.removeEventListener("pointerdown", close);
+    }, [tip]);
     const pf = usePortfolio();
     const perf = useQuery({
         queryKey: ["performance", range],
@@ -78,7 +94,7 @@ export function Home({ go }: { go: (t: Tab) => void }) {
         placeholderData: keepPreviousData,
     });
 
-    if (pf.isLoading) return <Hint>Loading…</Hint>;
+    if (pf.isLoading) return <Skeleton />;
     if (pf.error) return <ErrorText error={pf.error} />;
     const p = pf.data!;
     const ret = perf.data?.cumulativeReturn;
@@ -94,35 +110,37 @@ export function Home({ go }: { go: (t: Tab) => void }) {
                     <span className="text-[13px] opacity-85">
                         Total balance
                     </span>
-                    <button
-                        onClick={() => setTip(!tip)}
-                        aria-expanded={tip}
-                        aria-label="What is projected APY?"
-                        className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full bg-white/20 pr-2.5 pl-3 text-xs font-semibold"
-                    >
-                        {p.projectedApyBps === null
-                            ? "APY"
-                            : `${bpsPct(p.projectedApyBps)} APY`}
-                        <span
-                            aria-hidden="true"
-                            className="flex h-4 w-4 items-center justify-center rounded-full bg-white text-[11px] font-extrabold text-[#3A3FA8]"
+                    <div ref={tipRef}>
+                        <button
+                            onClick={() => setTip(!tip)}
+                            aria-expanded={tip}
+                            aria-label="What is projected APY?"
+                            className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full bg-white/20 pr-2.5 pl-3 text-xs font-semibold"
                         >
-                            !
-                        </span>
-                    </button>
-                    {tip && (
-                        <div
-                            role="tooltip"
-                            className="absolute top-9 right-0 z-10 w-60 rounded-[14px] bg-[var(--card)] px-3.5 py-3 text-[13px] leading-snug text-[var(--fg)] shadow-xl"
-                        >
-                            <b>Projected APY</b> is the target rate of your
-                            tiers. Returns are not guaranteed and can be
-                            negative.
-                            {p.historicalApy !== null && (
-                                <> Actual so far: {pct(p.historicalApy)}.</>
-                            )}
-                        </div>
-                    )}
+                            {p.projectedApyBps === null
+                                ? "APY"
+                                : `${bpsPct(p.projectedApyBps)} APY`}
+                            <span
+                                aria-hidden="true"
+                                className="flex h-4 w-4 items-center justify-center rounded-full bg-white text-[11px] font-extrabold text-[#3A3FA8]"
+                            >
+                                !
+                            </span>
+                        </button>
+                        {tip && (
+                            <div
+                                role="tooltip"
+                                className="absolute top-9 right-0 z-10 w-60 rounded-[14px] bg-[var(--card)] px-3.5 py-3 text-[13px] leading-snug text-[var(--fg)] shadow-xl"
+                            >
+                                <b>Projected APY</b> is the target rate of your
+                                tiers. Returns are not guaranteed and can be
+                                negative.
+                                {p.historicalApy !== null && (
+                                    <> Actual so far: {pct(p.historicalApy)}.</>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </div>
                 <div className="display text-[46px] leading-none font-bold tracking-tight">
                     ${fmtUsd(p.totalBalanceUsd)}

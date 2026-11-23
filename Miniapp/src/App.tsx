@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, getInitData } from "./lib/api";
-import { ErrorText, Hint } from "./components/ui";
+import { ErrorText, Hint, Skeleton } from "./components/ui";
 import { Home } from "./screens/Home";
 import { Deposit } from "./screens/Deposit";
 import { Withdraw } from "./screens/Withdraw";
@@ -71,8 +71,8 @@ export default function App() {
         );
     if (me.isLoading)
         return (
-            <div className="p-6">
-                <Hint>Loading…</Hint>
+            <div className="mx-auto max-w-xl px-4 pt-4">
+                <Skeleton />
             </div>
         );
     if (me.error)

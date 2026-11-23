@@ -52,7 +52,7 @@ export function Button({
         ghost: "border border-[var(--line)] bg-[var(--card)] font-semibold",
         danger: "border border-[var(--bad)] text-[var(--bad)] font-semibold",
     }[variant];
-    const s = size === "lg" ? "h-[72px] text-[19px]" : "h-11 px-5 text-sm";
+    const s = size === "lg" ? "h-14 px-5 text-base" : "h-11 px-5 text-sm";
     return (
         <button
             {...p}
@@ -144,6 +144,33 @@ export function Segmented<T extends string>({
         </div>
     );
 }
+
+// Placeholder shapes shown while a screen's data loads.
+const Bar = ({ className }: { className: string }) => (
+    <span className={`block rounded-full bg-[var(--track)] ${className}`} />
+);
+export const Skeleton = ({ header = true }: { header?: boolean }) => (
+    <div
+        role="status"
+        aria-label="Loading"
+        className="flex animate-pulse flex-col gap-3"
+    >
+        {header && (
+            <div className="hero -mx-4 -mt-4 mb-1 flex flex-col gap-3 rounded-b-[28px] px-5 pt-6 pb-5">
+                <span className="block h-3 w-24 rounded-full bg-white/30" />
+                <span className="block h-10 w-48 rounded-full bg-white/30" />
+                <span className="block h-[30px] rounded-full bg-white/20" />
+            </div>
+        )}
+        {[0, 1, 2].map((i) => (
+            <Card key={i} className="flex flex-col gap-2.5">
+                <Bar className="h-3.5 w-1/3" />
+                <Bar className="h-6 w-1/2" />
+                <Bar className="h-3 w-2/3" />
+            </Card>
+        ))}
+    </div>
+);
 
 export const ErrorText = ({ error }: { error: unknown }) =>
     error ? (

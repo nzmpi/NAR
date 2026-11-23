@@ -11,9 +11,9 @@ import {
     ErrorText,
     Field,
     Header,
-    Hint,
     Input,
     Select,
+    Skeleton,
     TIER_COLOR,
 } from "../components/ui";
 
@@ -45,7 +45,38 @@ export function Withdraw() {
     const [quote, setQuote] = useState<WithdrawalQuote | null>(null);
     const [done, setDone] = useState("");
 
-    if (pf.isLoading || assets.isLoading) return <Hint>Loading…</Hint>;
+    // Hooks stay above the loading return so their count never changes.
+    const preview = useMutation({
+        mutationFn: (b: object) =>
+            api<WithdrawalQuote>("/me/withdrawals/preview", {
+                method: "POST",
+                body: b,
+            }),
+        onSuccess: setQuote,
+    });
+    const submit = useMutation({
+        mutationFn: (b: object) =>
+            api<{ withdrawalId: string }>("/me/withdrawals", {
+                method: "POST",
+                body: b,
+                idempotencyKey: key.current,
+            }),
+        onSuccess: () => {
+            key.current = newKey();
+            setQuote(null);
+            setAmount("");
+            setSel({});
+            setMax({});
+            setManual(false);
+            setDone(
+                "Request submitted. You will get a message here when it is paid. You can follow or cancel it in History.",
+            );
+            for (const k of ["portfolio", "withdrawals"])
+                qc.invalidateQueries({ queryKey: [k] });
+        },
+    });
+
+    if (pf.isLoading || assets.isLoading) return <Skeleton />;
     if (pf.error || assets.error)
         return <ErrorText error={pf.error || assets.error} />;
 
@@ -94,14 +125,26 @@ export function Withdraw() {
     const lockSum = lockLots.reduce((s, l) => s + selMicro(l), 0n);
     const exceeds = lockLots.some((l) => selMicro(l) > avail(l));
     const addrOk = ADDRESS.test(dest.trim());
-    const valid =
-        !!asset &&
-        addrOk &&
-        amountMicro !== null &&
-        amountMicro >= MIN_MICRO &&
-        !exceeds &&
-        lockSum === remainder &&
-        amountMicro <= liquid + lockedTotal;
+    // What still blocks the button, shown as its label.
+    const need = !asset
+        ? "Choose a network"
+        : !dest.trim()
+          ? "Enter your wallet address"
+          : !addrOk
+            ? "Enter a valid wallet address"
+            : !amountMicro
+              ? "Enter amount to withdraw"
+              : amountMicro < MIN_MICRO
+                ? "Minimum withdrawal is $5"
+                : amountMicro > liquid + lockedTotal
+                  ? "More than you have"
+                  : exceeds
+                    ? "A position is over its limit"
+                    : lockSum < remainder
+                      ? `Pick $${fmtUsd(remainder - lockSum)} more from locked`
+                      : lockSum > remainder
+                        ? `Picked $${fmtUsd(lockSum - remainder)} too much`
+                        : null;
 
     const edit = (fn: () => void) => {
         fn();
@@ -140,36 +183,6 @@ export function Withdraw() {
                     ? { lotId: l.lotId, max: true }
                     : { lotId: l.lotId, grossUsd: selMicro(l).toString() },
             ),
-    });
-
-    const preview = useMutation({
-        mutationFn: () =>
-            api<WithdrawalQuote>("/me/withdrawals/preview", {
-                method: "POST",
-                body: body(),
-            }),
-        onSuccess: setQuote,
-    });
-    const submit = useMutation({
-        mutationFn: () =>
-            api<{ withdrawalId: string }>("/me/withdrawals", {
-                method: "POST",
-                body: body(),
-                idempotencyKey: key.current,
-            }),
-        onSuccess: () => {
-            key.current = newKey();
-            setQuote(null);
-            setAmount("");
-            setSel({});
-            setMax({});
-            setManual(false);
-            setDone(
-                "Request submitted. You will get a message here when it is paid. You can follow or cancel it in History.",
-            );
-            for (const k of ["portfolio", "withdrawals"])
-                qc.invalidateQueries({ queryKey: [k] });
-        },
     });
 
     return (
@@ -356,10 +369,12 @@ export function Withdraw() {
                 <Button
                     size="lg"
                     className="w-full"
-                    disabled={!valid || preview.isPending}
-                    onClick={() => preview.mutate()}
+                    disabled={!!need || preview.isPending}
+                    onClick={() => preview.mutate(body())}
                 >
-                    {preview.isPending ? "Calculating…" : "Review withdrawal →"}
+                    {preview.isPending
+                        ? "Calculating…"
+                        : (need ?? "Review withdrawal →")}
                 </Button>
             )}
 
@@ -400,7 +415,7 @@ export function Withdraw() {
                         size="lg"
                         className="w-full"
                         disabled={submit.isPending}
-                        onClick={() => submit.mutate()}
+                        onClick={() => submit.mutate(body())}
                     >
                         {submit.isPending
                             ? "Submitting…"
