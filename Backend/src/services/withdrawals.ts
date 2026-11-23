@@ -466,8 +466,6 @@ export function markWithdrawalPaid(
         txHash: string;
         reportedTotalUsd: bigint;
         confirmLargeMove?: boolean;
-        // Token units the admin actually sent. Must equal the booked payout.
-        sentAmount: bigint;
         now?: Date;
     },
 ) {
@@ -606,15 +604,6 @@ export function markWithdrawalPaid(
                 .where(eq(withdrawalAllocations.id, a.id));
         }
 
-        // The admin must have sent exactly the booked amount; a moved price means
-        // the payout was sent at the wrong amount. Throwing rolls the whole payment back.
-        const booked = usdToToken(net, asset.decimals);
-        if (booked !== i.sentAmount)
-            throw new AppError(
-                `The booked payout (${booked.toString()}) differs from the amount sent (${i.sentAmount.toString()}). The price moved. Reject this withdrawal and ask the member to request again.`,
-                409,
-                "amount_mismatch",
-            );
         lines.push({
             account: "managed_funds",
             direction: "credit",
@@ -641,6 +630,7 @@ export function markWithdrawalPaid(
                 grossAmountUsd: gross.toString(),
                 earlyFeeUsd: fee.toString(),
                 netPayoutUsd: net.toString(),
+                payoutAmount: usdToToken(net, asset.decimals).toString(),
                 status: "paid",
                 txHash: i.txHash.toLowerCase(),
                 reviewedByAdminId: i.adminId,

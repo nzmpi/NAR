@@ -379,7 +379,6 @@ export async function adminRoutes(app: FastifyInstance) {
                 .object({
                     txHash,
                     reportedTotalUsd: big,
-                    sentAmount: big, // token units actually sent
                 })
                 .parse(req.body);
             const [w] = await db
@@ -391,7 +390,6 @@ export async function adminRoutes(app: FastifyInstance) {
                 adminId: req.admin!.id,
                 txHash: b.txHash,
                 reportedTotalUsd: b.reportedTotalUsd,
-                sentAmount: b.sentAmount,
             });
             if (w)
                 void notifyUser(

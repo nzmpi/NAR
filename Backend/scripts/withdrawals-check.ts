@@ -168,7 +168,6 @@ await rejects(
         txHash: h.hash(),
         reportedTotalUsd: 12_400n * U,
         confirmLargeMove: true,
-        sentAmount: w2.payoutAmount,
         now: day(30),
     }),
     "paid without lock refused",
@@ -181,7 +180,6 @@ await rejects(
         txHash: "0x12",
         reportedTotalUsd: 12_400n * U,
         confirmLargeMove: true,
-        sentAmount: w2.payoutAmount,
         now: day(30),
     }),
     "bad tx hash rejected",
@@ -192,7 +190,6 @@ const paid = await markWithdrawalPaid(db, {
     txHash: h.hash(),
     reportedTotalUsd: 12_400n * U,
     confirmLargeMove: true,
-    sentAmount: w2.payoutAmount,
     now: day(30),
 });
 ok((await status(w2.withdrawalId)) === "paid", "paid");
@@ -215,7 +212,6 @@ await rejects(
         txHash: h.hash(),
         reportedTotalUsd: 12_400n * U,
         confirmLargeMove: true,
-        sentAmount: w2.payoutAmount,
         now: day(31),
     }),
     "cannot pay twice",

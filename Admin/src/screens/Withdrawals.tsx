@@ -90,8 +90,6 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
                 body: {
                     txHash: hash.trim(),
                     reportedTotalUsd: total6!.toString(),
-                    // The exact amount shown under "Send". The server refuses if the booked amount differs.
-                    sentAmount: w.payoutAmount,
                 },
             }),
         onSuccess: done,
@@ -196,10 +194,9 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
             {mode === "pay" && (
                 <div className="space-y-3 rounded-xl border border-[var(--line)] bg-[var(--bg)] p-4">
                     <Hint>
-                        Send the amount under "Send", then enter the transaction
-                        hash. If the pool price moved, the server refuses the
-                        payment: reject this withdrawal and ask the member to
-                        request again.
+                        Send the funds first, then enter the transaction hash.
+                        Final amounts use the settled pool price, so the paid
+                        net can differ slightly from the quote.
                     </Hint>
                     <Input
                         placeholder="Payment tx hash 0x…"
