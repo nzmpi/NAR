@@ -134,10 +134,6 @@ function NewDeposit({
             .filter((v) => v.chainUuid === asset.chainUuid)
             .sort((a, b) => a.nonce - b.nonce)[0];
     const units = asset ? parseUnits(amount, asset.decimals) : null;
-    const usdOk =
-        asset &&
-        units !== null &&
-        units >= BigInt(MIN_USD) * 10n ** BigInt(asset.decimals);
     // Stablecoins only, so the token amount is the dollar amount.
     const amt = Number(amount.replace(",", ".")) || 0;
     const bps = splitBps(
@@ -145,6 +141,12 @@ function NewDeposit({
         mode,
         amt,
     );
+    // An all-manager deposit (admin bootstrap) needs only $1.
+    const minUsd = bps[pools.indexOf("manager")] === 10000 ? 1 : MIN_USD;
+    const usdOk =
+        asset &&
+        units !== null &&
+        units >= BigInt(minUsd) * 10n ** BigInt(asset.decimals);
     const total = bps.reduce((s, b) => s + b, 0);
     const left = 10000 - total;
     // What still blocks the button, shown as its label.
@@ -155,7 +157,7 @@ function NewDeposit({
           : !units
             ? "Enter amount to deposit"
             : !usdOk
-              ? `Minimum deposit is $${MIN_USD}`
+              ? `Minimum deposit is $${minUsd}`
               : left > 0
                 ? mode === "usd"
                     ? `Split $${fmtUsd(BigInt(Math.round(((amt * left) / 10000) * 1e6)))} more between tiers`
@@ -229,7 +231,7 @@ function NewDeposit({
                         ))}
                     </Select>
                 </Field>
-                <Field label={`Amount · minimum $${MIN_USD}`}>
+                <Field label={`Amount · minimum $${minUsd}`}>
                     <span className="flex h-14 items-center rounded-[14px] border-2 border-[var(--accent)] bg-[var(--field)] px-4">
                         <span className="display text-2xl text-[var(--hint)]">
                             $

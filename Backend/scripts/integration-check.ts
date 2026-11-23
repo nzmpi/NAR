@@ -195,6 +195,27 @@ await rejects(
     }),
     "below 50 USD minimum rejected",
 );
+// Manager-only deposits need just 1 USD
+await rejects(
+    createIntent(db, {
+        userId: adminUser.id,
+        vaultId: vM.id,
+        assetId: usdc.id,
+        intendedAmount: U / 2n,
+        allocations: [{ poolKey: "manager", bps: 10_000 }],
+        now: T0,
+    }),
+    "manager deposit below 1 USD rejected",
+);
+await createIntent(db, {
+    userId: adminUser.id,
+    vaultId: vM.id,
+    assetId: usdc.id,
+    intendedAmount: U,
+    allocations: [{ poolKey: "manager", bps: 10_000 }],
+    now: T0,
+});
+ok(true, "1 USD manager-only deposit accepted");
 // Duplicate transfer identity
 const h = hash();
 await recordTransfer(db, {
