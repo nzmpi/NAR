@@ -340,6 +340,18 @@ export async function applyPendingRelocks(
                     BigInt(lot.reservedShares) - reserved
                 ).toString(),
                 principalUsd: (BigInt(lot.principalUsd) - carried).toString(),
+                // The moved part starts a new lot-year; the rest keeps its
+                // share of this lot's cap so the total cap does not grow.
+                ...(lot.capBaseUsd !== null && {
+                    capBaseUsd: (
+                        (BigInt(lot.capBaseUsd) * newShares) /
+                        lotShares
+                    ).toString(),
+                    capUsedUsd: (
+                        (BigInt(lot.capUsedUsd) * newShares) /
+                        lotShares
+                    ).toString(),
+                }),
                 closedAt: newShares === 0n ? now : null,
                 updatedAt: now,
             })

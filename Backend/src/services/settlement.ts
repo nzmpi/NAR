@@ -9,14 +9,15 @@ import {
 import {
     settle,
     type BonusRequest,
-    type MaturedLot,
+    type LotInput,
 } from "../accounting/settle.js";
 import { applyMaturity } from "../accounting/actions.js";
 import {
+    APY_BPS,
     LOCK_KEYS,
     clonePools,
     totalAssets,
-    type LockKey,
+    valueOfShares,
     type PoolKey,
     type Pools,
 } from "../accounting/pools.js";
@@ -44,6 +45,7 @@ export interface SettleOptions {
 // A typo in the reported total cannot be undone: a too-low total takes a loss
 // from user pools, and the recovery above fixed APY goes to the manager pool.
 export const LARGE_MOVE_BPS = 1_000n; // 10%, same as the dashboard warning
+const YEAR_MS = 365 * 86_400_000;
 
 export interface SettleOutcome {
     settlementId: string;
@@ -116,14 +118,64 @@ export async function settleInTx(
         .orderBy(positionLots.id);
     const matured = maturedAll.filter((l) => BigInt(l.reservedShares) === 0n);
     const t0 = toSeconds(intervalStart);
-    const maturedLots: MaturedLot[] = matured.map((l) => {
-        const m = toSeconds(l.maturesAt!);
-        return {
-            poolKey: keyById.get(l.poolId) as LockKey,
+    const t1 = toSeconds(now);
+
+    // Every open user lot with its yearly cap state. A lot-year starts at
+    // openedAt; at each anniversary the base resets to the lot's value.
+    // shortcut: the anniversary is applied at the first settlement after it,
+    // fine while settlements are frequent.
+    const userLots = await tx
+        .select()
+        .from(positionLots)
+        .where(
+            and(
+                inArray(
+                    positionLots.poolId,
+                    (["liquid", ...LOCK_KEYS] as const).map((k) => ids[k]),
+                ),
+                isNull(positionLots.closedAt),
+            ),
+        )
+        .orderBy(positionLots.id)
+        .for("update");
+    const capState = new Map<
+        string,
+        { yearStart: Date; base: bigint; used: bigint }
+    >();
+    const lotInputs: LotInput[] = [];
+    for (const l of userLots) {
+        const key = keyById.get(l.poolId) as LotInput["poolKey"];
+        const value = valueOfShares(before[key], BigInt(l.shares));
+        let yearStart = l.capYearStart ?? l.openedAt;
+        let base = l.capBaseUsd === null ? value : BigInt(l.capBaseUsd);
+        let used = BigInt(l.capUsedUsd);
+        while (now.getTime() >= yearStart.getTime() + YEAR_MS) {
+            yearStart = new Date(yearStart.getTime() + YEAR_MS);
+            base = value;
+            used = 0n;
+        }
+        capState.set(l.id, { yearStart, base, used });
+        // A lock that matured inside the interval earns its tier rate until
+        // maturity and the liquid rate after it.
+        let apyBps = APY_BPS[key];
+        if (key !== "liquid" && l.maturesAt && t1 > t0) {
+            let m = toSeconds(l.maturesAt);
+            if (m < t0) m = t0;
+            if (m < t1)
+                apyBps = Number(
+                    (BigInt(APY_BPS[key]) * (m - t0) +
+                        BigInt(APY_BPS.liquid) * (t1 - m)) /
+                        (t1 - t0),
+                );
+        }
+        lotInputs.push({
+            lotId: l.id,
+            poolKey: key,
             shares: BigInt(l.shares),
-            maturesAt: m < t0 ? t0 : m,
-        };
-    });
+            apyBps,
+            capLeftUsd: (base * BigInt(APY_BPS[key])) / 10_000n - used,
+        });
+    }
 
     // Bonus requests -> pool keys from the lots.
     const bonusReqs: BonusRequest[] = [];
@@ -173,7 +225,7 @@ export async function settleInTx(
             reportedTotalUsd: o.reportedTotalUsd,
             intervalStart: toSeconds(intervalStart),
             settledAt: toSeconds(now),
-            maturedLots,
+            lots: lotInputs,
             bonuses: bonusReqs,
         });
     } catch (e) {
@@ -229,6 +281,23 @@ export async function settleInTx(
         adminId: o.adminId,
         lines,
     });
+
+    // Yield shares go to each lot; cap state is saved for every lot.
+    const creditByLot = new Map(result.lotCredits.map((c) => [c.lotId, c]));
+    for (const l of userLots) {
+        const c = creditByLot.get(l.id);
+        const st = capState.get(l.id)!;
+        await tx
+            .update(positionLots)
+            .set({
+                shares: sql`${positionLots.shares} + ${(c?.sharesMinted ?? 0n).toString()}::numeric`,
+                capYearStart: st.yearStart,
+                capBaseUsd: st.base.toString(),
+                capUsedUsd: (st.used + (c?.amountUsd ?? 0n)).toString(),
+                updatedAt: now,
+            })
+            .where(eq(positionLots.id, l.id));
+    }
 
     // Bonus shares go to the chosen lot.
     for (const bm of result.bonusMints) {

@@ -1,22 +1,23 @@
-import { P, mulDivFloor } from "./fixed.js";
-import { growthFactor } from "./rates.js";
+import { mulDivFloor } from "./fixed.js";
 import {
-    APY_BPS,
-    LOCK_KEYS,
     POOL_KEYS,
     clonePools,
     mint,
     totalAssets,
     valueOfShares,
-    type LockKey,
     type PoolKey,
     type Pools,
 } from "./pools.js";
 
-export interface MaturedLot {
-    poolKey: LockKey;
+// One open user lot. The service works out its effective APY for the
+// interval (time-weighted when a lock matured inside it) and how much of its
+// yearly cap is left.
+export interface LotInput {
+    lotId: string;
+    poolKey: Exclude<PoolKey, "manager">;
     shares: bigint;
-    maturesAt: bigint; // unix seconds, must be in [intervalStart, settledAt]
+    apyBps: number;
+    capLeftUsd: bigint;
 }
 export interface BonusRequest {
     lotId: string;
@@ -28,10 +29,7 @@ export interface SettleInput {
     reportedTotalUsd: bigint;
     intervalStart: bigint; // unix seconds (last settlement)
     settledAt: bigint; // unix seconds (server time)
-    // Lock-pool lots that matured inside the interval but are not yet
-    // converted to liquid. Lots matured before intervalStart must have been
-    // converted already (convert before settling).
-    maturedLots?: MaturedLot[];
+    lots?: LotInput[];
     bonuses?: BonusRequest[];
 }
 export type AllocKind =
@@ -47,59 +45,51 @@ export interface BonusMint {
     amountUsd: bigint;
     sharesMinted: bigint;
 }
+export interface LotCredit {
+    lotId: string;
+    poolKey: PoolKey;
+    amountUsd: bigint;
+    sharesMinted: bigint;
+}
 export interface SettleResult {
     pools: Pools;
     pnlUsd: bigint;
     allocations: Allocation[];
     bonusMints: BonusMint[];
+    lotCredits: LotCredit[];
 }
 
-// Tier cap for one pool over the interval, with maturity time-weighting.
-function poolCap(
-    key: Exclude<PoolKey, "manager">,
-    pools: Pools,
-    t0: bigint,
-    t1: bigint,
-    matured: MaturedLot[],
-): { cap: bigint; weight: bigint } {
-    const nav = pools[key].assets;
-    const dt = t1 - t0;
-    // weight = USD * apyBps * seconds (simple, time-weighted). Used only to
-    // split a profit shortfall so earnings per USD stay proportional to APY
-    // (an 8% pool earns 8/6 of what a 6% pool earns per USD).
-    if (key === "liquid")
-        return {
-            cap: mulDivFloor(nav, growthFactor(APY_BPS.liquid, dt) - P, P),
-            weight: nav * BigInt(APY_BPS.liquid) * dt,
-        };
+// Above its yearly cap a lot keeps this fraction of its share.
+export const OVER_CAP_DIVISOR = 10n;
 
-    const mine = matured.filter((m) => m.poolKey === key);
-    let maturedValue = 0n;
-    let cap = 0n;
-    let weight = 0n;
-    for (const m of mine) {
-        if (m.maturesAt < t0 || m.maturesAt > t1)
-            throw new Error("matured lot outside interval");
-        const v = valueOfShares(pools[key], m.shares);
-        maturedValue += v;
-        const f =
-            (growthFactor(APY_BPS[key], m.maturesAt - t0) *
-                growthFactor(APY_BPS.liquid, t1 - m.maturesAt)) /
-            P;
-        cap += mulDivFloor(v, f - P, P);
-        weight +=
-            v *
-            (BigInt(APY_BPS[key]) * (m.maturesAt - t0) +
-                BigInt(APY_BPS.liquid) * (t1 - m.maturesAt));
-    }
-    if (maturedValue > nav) throw new Error("matured lots exceed pool NAV");
-    cap += mulDivFloor(
-        nav - maturedValue,
-        growthFactor(APY_BPS[key], dt) - P,
-        P,
+// Splits positive P&L. The manager pool takes its NAV share. User lots split
+// the rest by value * APY; each lot gets its share in full while under its
+// yearly cap, and 1/10 of the part above it. The other 9/10 and rounding
+// dust go to the manager.
+export function lotCredits(
+    pools: Pools,
+    pnl: bigint,
+    lots: LotInput[],
+): { lotId: string; poolKey: LotInput["poolKey"]; amountUsd: bigint }[] {
+    const prevTotal = totalAssets(pools);
+    const managerShare =
+        prevTotal > 0n ? mulDivFloor(pnl, pools.manager.assets, prevTotal) : 0n;
+    const userPart = pnl - managerShare;
+    const weights = lots.map(
+        (l) => valueOfShares(pools[l.poolKey], l.shares) * BigInt(l.apyBps),
     );
-    weight += (nav - maturedValue) * BigInt(APY_BPS[key]) * dt;
-    return { cap, weight };
+    const weightSum = weights.reduce((a, b) => a + b, 0n);
+    if (weightSum === 0n) return [];
+    return lots.map((l, i) => {
+        const share = mulDivFloor(userPart, weights[i], weightSum);
+        const left = l.capLeftUsd > 0n ? l.capLeftUsd : 0n;
+        const full = share < left ? share : left;
+        return {
+            lotId: l.lotId,
+            poolKey: l.poolKey,
+            amountUsd: full + (share - full) / OVER_CAP_DIVISOR,
+        };
+    });
 }
 
 export function settle(input: SettleInput): SettleResult {
@@ -117,6 +107,7 @@ export function settle(input: SettleInput): SettleResult {
     const pnl = reported - prevTotal;
     const allocations: Allocation[] = [];
     const bonusMints: BonusMint[] = [];
+    const lotMints: LotCredit[] = [];
     const bonuses = input.bonuses ?? [];
 
     if (pnl < 0n) {
@@ -136,19 +127,14 @@ export function settle(input: SettleInput): SettleResult {
         );
         pools.manager.assets = reported - others;
     } else if (pnl > 0n) {
-        const keys: Exclude<PoolKey, "manager">[] = ["liquid", ...LOCK_KEYS];
-        const parts = keys.map((k) =>
-            poolCap(k, before, t0, t1, input.maturedLots ?? []),
-        );
-        const capSum = parts.reduce((a, b) => a + b.cap, 0n);
-        const weightSum = parts.reduce((a, b) => a + b.weight, 0n);
-        // Profit >= caps: pay caps, manager gets the rest. Profit < caps:
-        // split all profit by APY-time weight; manager gets only dust.
-        const credits = parts.map((x) =>
-            capSum <= pnl ? x.cap : mulDivFloor(x.weight, pnl, weightSum),
-        );
-        keys.forEach((k, i) => (pools[k].assets += credits[i]));
-        const credited = credits.reduce((a, b) => a + b, 0n);
+        const credits = lotCredits(before, pnl, input.lots ?? []);
+        for (const c of credits) {
+            if (c.amountUsd <= 0n) continue;
+            const r = mint(pools[c.poolKey], c.amountUsd);
+            pools[c.poolKey] = r.state;
+            lotMints.push({ ...c, sharesMinted: r.shares });
+        }
+        const credited = credits.reduce((a, c) => a + c.amountUsd, 0n);
         const managerExcess = pnl - credited;
         if (managerExcess > 0n && before.manager.shares === 0n)
             throw new Error(
@@ -224,5 +210,11 @@ export function settle(input: SettleInput): SettleResult {
             );
     if (totalAssets(pools) !== reported)
         throw new Error("invariant: pool NAVs != reported total");
-    return { pools, pnlUsd: pnl, allocations, bonusMints };
+    return {
+        pools,
+        pnlUsd: pnl,
+        allocations,
+        bonusMints,
+        lotCredits: lotMints,
+    };
 }

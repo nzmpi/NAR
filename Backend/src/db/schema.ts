@@ -363,6 +363,11 @@ export const positionLots = pgTable(
         sourceId: uuid("source_id"),
         // Lot this one was created from (relock / maturity).
         parentLotId: uuid("parent_lot_id"),
+        // Yearly yield cap: base * tier APY per lot-year. Null until the
+        // first settlement sets them (year start = openedAt, base = value).
+        capYearStart: timestamp("cap_year_start", { withTimezone: true }),
+        capBaseUsd: bigAmount("cap_base_usd"),
+        capUsedUsd: bigAmount("cap_used_usd").notNull().default("0"),
         createdAt: createdAt(),
         updatedAt: updatedAt(),
     },
