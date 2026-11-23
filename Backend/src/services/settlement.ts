@@ -121,7 +121,8 @@ export async function settleInTx(
     const t1 = toSeconds(now);
 
     // Every open user lot with its yearly cap state. A lot-year starts at
-    // openedAt; at each anniversary the base resets to the lot's value.
+    // openedAt (maturity and relock lots inherit it from their parent); at
+    // each anniversary the base resets to the lot's value.
     // shortcut: the anniversary is applied at the first settlement after it,
     // fine while settlements are frequent.
     const userLots = await tx
@@ -350,6 +351,10 @@ export async function settleInTx(
                 sourceType: "maturity",
                 sourceId: lot.id,
                 parentLotId: lot.id,
+                // Same lot-year and cap use; only the rate changes to liquid.
+                capYearStart: lot.capYearStart,
+                capBaseUsd: lot.capBaseUsd,
+                capUsedUsd: lot.capUsedUsd,
             });
             await postLedger(tx, {
                 type: "maturity",

@@ -370,20 +370,28 @@ ok(true, "<10% NAV move needs no confirmation");
         l1.capBaseUsd !== null && BigInt(l1.capUsedUsd) > 0n,
         "settlement records the lot's yearly cap use",
     );
+    ok(
+        l1.capYearStart!.getTime() === bobLot.openedAt.getTime(),
+        "maturity lot keeps the parent's lot-year",
+    );
+    // Zero P&L, so nothing is credited: used must be exactly 0 after the reset.
     await settleManual(db, {
         adminId: admin.id,
-        reportedTotalUsd: 12_700n * U,
+        reportedTotalUsd: 12_600n * U,
         now: day(1_100),
     });
     const l2 = await lotNow();
+    const yearMs = 365 * 86_400_000;
     const years =
-        (l2.capYearStart!.getTime() - l2.openedAt.getTime()) /
-        (365 * 86_400_000);
-    ok(years === 2, "cap year advances by whole lot-years");
+        (l2.capYearStart!.getTime() - bobLot.openedAt.getTime()) / yearMs;
     ok(
-        BigInt(l2.capUsedUsd) <= (BigInt(l2.capBaseUsd!) * 600n) / 10_000n,
-        "cap use reset at the anniversary",
+        years ===
+            Math.floor(
+                (day(1_100).getTime() - bobLot.openedAt.getTime()) / yearMs,
+            ),
+        "cap year advances by whole lot-years",
     );
+    ok(l2.capUsedUsd === "0", "cap use reset at the anniversary");
 }
 {
     const listed = await adminListUsers(db);
