@@ -11,6 +11,7 @@ import {
     ErrorText,
     Header,
     Hint,
+    Skeleton,
     Input,
     TIER_COLOR,
     TIER_SHORT,
@@ -32,7 +33,7 @@ const targets = (l: Lot): Lock[] =>
 
 export function Relock() {
     const pf = usePortfolio();
-    if (pf.isLoading) return <Hint>Loading…</Hint>;
+    if (pf.isLoading) return <Skeleton />;
     if (pf.error) return <ErrorText error={pf.error} />;
     const lots = pf.data!.lots.filter((l) => avail(l) > 0n);
 

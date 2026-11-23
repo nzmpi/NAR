@@ -4,7 +4,13 @@ import { api } from "../lib/api";
 import { fmtUsd, formatUnits } from "../lib/money";
 import { POOL_LABEL, type Intent } from "../lib/types";
 import { useAssets, useRelocks, useWithdrawals } from "../lib/queries";
-import { ErrorText, Header, Hint, Segmented, statusOf } from "../components/ui";
+import {
+    ErrorText,
+    Header,
+    Segmented,
+    Skeleton,
+    statusOf,
+} from "../components/ui";
 
 type Kind = "deposit" | "withdrawal" | "relock";
 interface Item {
@@ -101,7 +107,7 @@ export function History() {
         return (
             <div className="flex flex-col gap-3">
                 {header}
-                <Hint>Loading…</Hint>
+                <Skeleton header={false} />
             </div>
         );
     const err = assets.error || deposits.error || wd.error || rl.error;

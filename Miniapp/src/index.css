@@ -2,62 +2,163 @@
 
 /* Look C. Light by default; App adds .dark when Telegram (or the OS) is dark. */
 :root {
-    --bg: #f4f5f7; --card: #ffffff; --nav: #ffffff; --line: #e6e8ec; --row: #eef0f3;
-    --fg: #0f1419; --hint: #5b6472; --soft: #4a5361;
-    --accent: #2f5bea; --link: #1e44c4; --accent-soft: #ebf0fe; --accent-ink: #1e44c4;
-    --good: #0f7b4d; --good-soft: #e3f4ea; --bad: #b42318; --bad-soft: #fde7e4;
-    --warn: #8a4f00; --warn-soft: #fdf0dc; --muted-soft: #eef0f3;
-    --seg: #eaecf0; --seg-on: #ffffff; --field: #ffffff; --hover: #eef0f4; --track: #e3e7ee;
-    --hero-a: #2f5bea; --hero-b: #7a4fe0;
-    --t0: #2f5bea; --t1: #0f9d6b; --t2: #c9780e; --t3: #7a4fe0; --mgr: #9a6a00; --mgr-soft: #fff8e6;
+    --bg: #f4f5f7;
+    --card: #ffffff;
+    --nav: #ffffff;
+    --line: #e6e8ec;
+    --row: #eef0f3;
+    --fg: #0f1419;
+    --hint: #5b6472;
+    --soft: #4a5361;
+    --accent: #2f5bea;
+    --link: #1e44c4;
+    --accent-soft: #ebf0fe;
+    --accent-ink: #1e44c4;
+    --good: #0f7b4d;
+    --good-soft: #e3f4ea;
+    --bad: #b42318;
+    --bad-soft: #fde7e4;
+    --warn: #8a4f00;
+    --warn-soft: #fdf0dc;
+    --muted-soft: #eef0f3;
+    --seg: #eaecf0;
+    --seg-on: #ffffff;
+    --field: #ffffff;
+    --hover: #eef0f4;
+    --track: #e3e7ee;
+    --hero-a: #2f5bea;
+    --hero-b: #7a4fe0;
+    --t0: #2f5bea;
+    --t1: #0f9d6b;
+    --t2: #c9780e;
+    --t3: #7a4fe0;
+    --mgr: #9a6a00;
+    --mgr-soft: #fff8e6;
     --chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235b6472' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
     color-scheme: light;
 }
 .dark {
-    --bg: #0b0e12; --card: #14181e; --nav: #111419; --line: #222831; --row: #1e232b;
-    --fg: #e8ebef; --hint: #9aa3af; --soft: #b4bcc7;
-    --accent: #3e5eeb; --link: #8fa5ff; --accent-soft: #1d2748; --accent-ink: #b7c6ff;
-    --good: #4ade9a; --good-soft: #10301f; --bad: #ff8a7a; --bad-soft: #3a1714;
-    --warn: #f5c77e; --warn-soft: #3a2a10; --muted-soft: #222831;
-    --seg: #171b21; --seg-on: #2a313c; --field: #0f1216; --hover: #1b2028; --track: #252b34;
-    --hero-a: #2a47c4; --hero-b: #5b3bb0;
-    --t0: #7b95ff; --t1: #34d399; --t2: #f5b454; --t3: #a78bfa; --mgr: #d9a441; --mgr-soft: #2a2110;
+    --bg: #0b0e12;
+    --card: #14181e;
+    --nav: #111419;
+    --line: #222831;
+    --row: #1e232b;
+    --fg: #e8ebef;
+    --hint: #9aa3af;
+    --soft: #b4bcc7;
+    --accent: #3e5eeb;
+    --link: #8fa5ff;
+    --accent-soft: #1d2748;
+    --accent-ink: #b7c6ff;
+    --good: #4ade9a;
+    --good-soft: #10301f;
+    --bad: #ff8a7a;
+    --bad-soft: #3a1714;
+    --warn: #f5c77e;
+    --warn-soft: #3a2a10;
+    --muted-soft: #222831;
+    --seg: #171b21;
+    --seg-on: #2a313c;
+    --field: #0f1216;
+    --hover: #1b2028;
+    --track: #252b34;
+    --hero-a: #2a47c4;
+    --hero-b: #5b3bb0;
+    --t0: #7b95ff;
+    --t1: #34d399;
+    --t2: #f5b454;
+    --t3: #a78bfa;
+    --mgr: #d9a441;
+    --mgr-soft: #2a2110;
     --chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa3af' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
     color-scheme: dark;
 }
 
 @layer base {
-    html, body, #root { min-height: 100%; }
+    html,
+    body,
+    #root {
+        min-height: 100%;
+    }
     body {
-        margin: 0; background: var(--bg); color: var(--fg); font-size: 14px;
-        font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-size: 14px;
+        font-family:
+            Inter,
+            system-ui,
+            -apple-system,
+            "Segoe UI",
+            Roboto,
+            sans-serif;
         -webkit-tap-highlight-color: transparent;
     }
-    input, select, button { font: inherit; color: inherit; }
-    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    input,
+    select,
+    button {
+        font: inherit;
+        color: inherit;
+    }
+    :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+    }
 }
-.tnum { font-variant-numeric: tabular-nums; }
-.display { font-family: "Space Grotesk", Inter, system-ui, sans-serif; }
+.tnum {
+    font-variant-numeric: tabular-nums;
+}
+.display {
+    font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+}
 @utility hero {
     background-image: linear-gradient(135deg, var(--hero-a), var(--hero-b));
 }
 
 /* Round dropdown with a chevron; browsers with customizable selects also get a rounded menu. */
 .sel {
-    appearance: none; -webkit-appearance: none;
-    background-image: var(--chev); background-repeat: no-repeat;
-    background-position: right 16px center; background-size: 18px;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: var(--chev);
+    background-repeat: no-repeat;
+    background-position: right 16px center;
+    background-size: 18px;
 }
 @supports (appearance: base-select) {
-    .sel, .sel::picker(select) { appearance: base-select; }
-    .sel { display: flex; align-items: center; }
-    .sel::picker-icon { display: none; }
+    .sel,
     .sel::picker(select) {
-        margin-top: 6px; padding: 6px; border: 1px solid var(--line); border-radius: 18px;
-        background: var(--card); color: var(--fg); box-shadow: 0 10px 30px rgb(15 20 25 / 0.18);
+        appearance: base-select;
     }
-    .sel option { padding: 10px 14px; border-radius: 999px; font-size: 14px; }
-    .sel option:hover { background: var(--hover); }
-    .sel option:checked { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
-    .sel option::checkmark { display: none; }
+    .sel {
+        display: flex;
+        align-items: center;
+    }
+    .sel::picker-icon {
+        display: none;
+    }
+    .sel::picker(select) {
+        margin-top: 6px;
+        padding: 6px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--card);
+        color: var(--fg);
+        box-shadow: 0 10px 30px rgb(15 20 25 / 0.18);
+    }
+    .sel option {
+        padding: 10px 14px;
+        border-radius: 999px;
+        font-size: 14px;
+    }
+    .sel option:hover {
+        background: var(--hover);
+    }
+    .sel option:checked {
+        background: var(--accent-soft);
+        color: var(--accent-ink);
+        font-weight: 600;
+    }
+    .sel option::checkmark {
+        display: none;
+    }
 }

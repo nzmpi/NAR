@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, newKey } from "../lib/api";
 import { bpsPct, fmtUsd, formatUnits, parseUnits } from "../lib/money";
@@ -22,6 +22,7 @@ import {
     Hint,
     Input,
     Segmented,
+    Skeleton,
     Select,
     StatusBadge,
     TIER_COLOR,
@@ -43,6 +44,13 @@ const LOCK_NOTE: Record<string, string> = {
 };
 
 type DepositPool = PoolKey | "manager";
+const NO_SPLIT: Record<DepositPool, string> = {
+    liquid: "",
+    lock_1m: "",
+    lock_2m: "",
+    lock_3m: "",
+    manager: "",
+};
 // "Base Sepolia · USDC · …7f3a": chain, token, end of the token contract.
 const assetLabel = (a: Asset) =>
     `${a.chainName} · ${a.symbol} · …${a.tokenAddress.slice(-4)}`;
@@ -61,9 +69,11 @@ export function Deposit() {
         queryFn: () => api<Intent[]>("/me/deposits"),
         refetchInterval: 30_000,
     });
+    // The deposit just created; its card scrolls into view once it loads.
+    const [created, setCreated] = useState("");
 
     if (assets.isLoading || vaults.isLoading || intents.isLoading)
-        return <Hint>Loading…</Hint>;
+        return <Skeleton />;
     const err = assets.error || vaults.error || intents.error;
     if (err) return <ErrorText error={err} />;
 
@@ -79,29 +89,36 @@ export function Deposit() {
                 </span>
             </Header>
             {active.map((i) => (
-                <IntentCard key={i.id} intent={i} {...ctx} />
+                <IntentCard
+                    key={i.id}
+                    intent={i}
+                    focus={i.id === created}
+                    {...ctx}
+                />
             ))}
             {active.length > 0 && (
                 <h2 className="display mt-2 text-xl font-bold">New deposit</h2>
             )}
-            <NewDeposit {...ctx} />
+            <NewDeposit {...ctx} onCreated={setCreated} />
         </div>
     );
 }
 
-function NewDeposit({ assets, vaults }: { assets: Asset[]; vaults: Vault[] }) {
+function NewDeposit({
+    assets,
+    vaults,
+    onCreated,
+}: {
+    assets: Asset[];
+    vaults: Vault[];
+    onCreated: (id: string) => void;
+}) {
     const qc = useQueryClient();
     const key = useRef(newKey());
     const [assetId, setAssetId] = useState(assets[0]?.assetId ?? "");
     const [amount, setAmount] = useState("");
-    const [mode, setMode] = useState<AllocMode>("pct");
-    const [raw, setRaw] = useState<Record<DepositPool, string>>({
-        liquid: "100",
-        lock_1m: "",
-        lock_2m: "",
-        lock_3m: "",
-        manager: "",
-    });
+    const [mode, setMode] = useState<AllocMode>("usd");
+    const [raw, setRaw] = useState(NO_SPLIT);
     const me = useQuery({
         queryKey: ["me"],
         queryFn: () => api<{ id: string; isAdmin?: boolean }>("/me"),
@@ -130,7 +147,22 @@ function NewDeposit({ assets, vaults }: { assets: Asset[]; vaults: Vault[] }) {
     );
     const total = bps.reduce((s, b) => s + b, 0);
     const left = 10000 - total;
-    const canSubmit = !!asset && !!vault && !!usdOk && total === 10000;
+    // What still blocks the button, shown as its label.
+    const need = !asset
+        ? "Choose a network"
+        : !vault
+          ? "No deposit address on this network yet"
+          : !units
+            ? "Enter amount to deposit"
+            : !usdOk
+              ? `Minimum deposit is $${MIN_USD}`
+              : left > 0
+                ? mode === "usd"
+                    ? `Split $${fmtUsd(BigInt(Math.round(((amt * left) / 10000) * 1e6)))} more between tiers`
+                    : `Split ${bpsPct(left)} more between tiers`
+                : left < 0
+                  ? "Tiers add up to more than the amount"
+                  : null;
 
     const setTier = (p: DepositPool, b: number) =>
         setRaw({ ...raw, [p]: fromBps(Math.max(0, b), mode, amt) });
@@ -156,9 +188,11 @@ function NewDeposit({ assets, vaults }: { assets: Asset[]; vaults: Vault[] }) {
                         .filter((x) => x.bps > 0),
                 },
             }),
-        onSuccess: () => {
+        onSuccess: (intent) => {
             key.current = newKey();
             setAmount("");
+            setRaw(NO_SPLIT);
+            onCreated(intent.id);
             qc.invalidateQueries({ queryKey: ["deposits"] });
             qc.invalidateQueries({ queryKey: ["portfolio"] });
         },
@@ -203,7 +237,10 @@ function NewDeposit({ assets, vaults }: { assets: Asset[]; vaults: Vault[] }) {
                         <input
                             inputMode="decimal"
                             value={amount}
-                            onChange={(e) => setAmount(e.target.value)}
+                            onChange={(e) => {
+                                setAmount(e.target.value);
+                                setRaw(NO_SPLIT);
+                            }}
                             placeholder="100"
                             aria-label="Amount"
                             className="display min-w-0 flex-1 bg-transparent pl-1 text-2xl font-semibold outline-none"
@@ -361,10 +398,12 @@ function NewDeposit({ assets, vaults }: { assets: Asset[]; vaults: Vault[] }) {
             <Button
                 size="lg"
                 className="w-full"
-                disabled={!canSubmit || create.isPending}
+                disabled={!!need || create.isPending}
                 onClick={() => create.mutate()}
             >
-                {create.isPending ? "Creating…" : "Get deposit address →"}
+                {create.isPending
+                    ? "Creating…"
+                    : (need ?? "Get deposit address →")}
             </Button>
         </>
     );
@@ -374,12 +413,19 @@ function IntentCard({
     intent: i,
     assets,
     vaults,
+    focus,
 }: {
     intent: Intent;
     assets: Asset[];
     vaults: Vault[];
+    focus: boolean;
 }) {
     const qc = useQueryClient();
+    const ref = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (focus)
+            ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, [focus]);
     const [hash, setHash] = useState("");
     const [msg, setMsg] = useState("");
     const asset = assets.find((a) => a.assetId === i.assetId);
@@ -434,130 +480,137 @@ function IntentCard({
     const intended = formatUnits(i.intendedAmount, dec, 2);
 
     return (
-        <Card className="flex flex-col gap-3.5">
-            <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold">
-                    {intended} {sym} deposit
-                </span>
-                <StatusBadge status={i.status} />
-            </div>
+        <div ref={ref} className="scroll-mt-4">
+            <Card className="flex flex-col gap-3.5">
+                <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold">
+                        {intended} {sym} deposit
+                    </span>
+                    <StatusBadge status={i.status} />
+                </div>
 
-            {i.status === "intent" && vault && asset && (
-                <>
-                    <p>
-                        Send{" "}
-                        <b>
-                            {intended} {sym}
-                        </b>{" "}
-                        on <b>{asset.chainName}</b> to this address. Use only
-                        this network and token.
-                    </p>
-                    <div className="rounded-xl bg-[var(--bg)] px-3.5 py-3 font-mono text-[13px] break-all">
-                        {vault.address}
-                    </div>
-                    <Button
-                        variant="ghost"
-                        onClick={() =>
-                            navigator.clipboard
-                                ?.writeText(vault.address)
-                                .then(() => setMsg("Address copied."))
-                        }
-                    >
-                        Copy address
-                    </Button>
-                    <p className="text-xs text-[var(--hint)]">
-                        Valid until {new Date(i.expiresAt).toLocaleString()}.
-                        {!vault.isDeployed &&
-                            " Your vault is created when the deposit is processed; it is safe to send before that."}
-                    </p>
-                    <Button
-                        className="h-[60px] text-[17px]"
-                        disabled={check.isPending}
-                        onClick={() => check.mutate()}
-                    >
-                        {check.isPending ? "Checking…" : "I sent it"}
-                    </Button>
-                    <details className="text-[13px]">
-                        <summary className="cursor-pointer font-medium text-[var(--link)]">
-                            Not detected? Enter the transaction hash
-                        </summary>
-                        <div className="mt-2.5 flex gap-2">
-                            <Input
-                                value={hash}
-                                onChange={(e) => setHash(e.target.value)}
-                                placeholder="0x…"
-                                aria-label="Transaction hash"
-                                className="!h-10 font-mono !text-xs"
-                            />
-                            <Button
-                                className="!h-10"
-                                disabled={
-                                    !/^0x[a-fA-F0-9]{64}$/.test(hash.trim()) ||
-                                    attach.isPending
-                                }
-                                onClick={() => attach.mutate()}
-                            >
-                                Send
-                            </Button>
+                {i.status === "intent" && vault && asset && (
+                    <>
+                        <p>
+                            Send{" "}
+                            <b>
+                                {intended} {sym}
+                            </b>{" "}
+                            on <b>{asset.chainName}</b> to this address. Use
+                            only this network and token.
+                        </p>
+                        <div className="rounded-xl bg-[var(--bg)] px-3.5 py-3 font-mono text-[13px] break-all">
+                            {vault.address}
                         </div>
-                    </details>
-                    <button
-                        className="cursor-pointer self-end py-1 text-[13px] font-semibold text-[var(--bad)] disabled:opacity-50"
-                        disabled={cancel.isPending}
-                        onClick={() => cancel.mutate()}
-                    >
-                        Cancel deposit
-                    </button>
-                </>
-            )}
+                        <Button
+                            variant="ghost"
+                            onClick={() =>
+                                navigator.clipboard
+                                    ?.writeText(vault.address)
+                                    .then(() => setMsg("Address copied."))
+                            }
+                        >
+                            Copy address
+                        </Button>
+                        <p className="text-xs text-[var(--hint)]">
+                            Valid until {new Date(i.expiresAt).toLocaleString()}
+                            .
+                            {!vault.isDeployed &&
+                                " Your vault is created when the deposit is processed; it is safe to send before that."}
+                        </p>
+                        <Button
+                            className="h-[60px] text-[17px]"
+                            disabled={check.isPending}
+                            onClick={() => check.mutate()}
+                        >
+                            {check.isPending ? "Checking…" : "I sent it"}
+                        </Button>
+                        <details className="text-[13px]">
+                            <summary className="cursor-pointer font-medium text-[var(--link)]">
+                                Not detected? Enter the transaction hash
+                            </summary>
+                            <div className="mt-2.5 flex gap-2">
+                                <Input
+                                    value={hash}
+                                    onChange={(e) => setHash(e.target.value)}
+                                    placeholder="0x…"
+                                    aria-label="Transaction hash"
+                                    className="!h-10 font-mono !text-xs"
+                                />
+                                <Button
+                                    className="!h-10"
+                                    disabled={
+                                        !/^0x[a-fA-F0-9]{64}$/.test(
+                                            hash.trim(),
+                                        ) || attach.isPending
+                                    }
+                                    onClick={() => attach.mutate()}
+                                >
+                                    Send
+                                </Button>
+                            </div>
+                        </details>
+                        <button
+                            className="cursor-pointer self-end py-1 text-[13px] font-semibold text-[var(--bad)] disabled:opacity-50"
+                            disabled={cancel.isPending}
+                            onClick={() => cancel.mutate()}
+                        >
+                            Cancel deposit
+                        </button>
+                    </>
+                )}
 
-            {i.status === "transfer_detected" && (
-                <p>We see your transfer. It will be confirmed shortly.</p>
-            )}
+                {i.status === "transfer_detected" && (
+                    <p>We see your transfer. It will be confirmed shortly.</p>
+                )}
 
-            {i.status === "awaiting_user_approval" && (
-                <>
+                {i.status === "awaiting_user_approval" && (
+                    <>
+                        <p>
+                            You planned{" "}
+                            <b>
+                                {intended} {sym}
+                            </b>{" "}
+                            but{" "}
+                            <b>
+                                {i.confirmedAmount
+                                    ? formatUnits(i.confirmedAmount, dec, 2)
+                                    : "?"}{" "}
+                                {sym}
+                            </b>{" "}
+                            arrived
+                            {i.confirmedAmountUsd && (
+                                <> (${fmtUsd(i.confirmedAmountUsd)})</>
+                            )}
+                            . Approve to continue with the received amount.
+                        </p>
+                        <Button
+                            className="h-[60px] text-[17px]"
+                            disabled={approve.isPending}
+                            onClick={() => approve.mutate()}
+                        >
+                            Approve received amount
+                        </Button>
+                    </>
+                )}
+
+                {i.status === "ready_to_activate" && (
                     <p>
-                        You planned{" "}
-                        <b>
-                            {intended} {sym}
-                        </b>{" "}
-                        but{" "}
-                        <b>
-                            {i.confirmedAmount
-                                ? formatUnits(i.confirmedAmount, dec, 2)
-                                : "?"}{" "}
-                            {sym}
-                        </b>{" "}
-                        arrived
-                        {i.confirmedAmountUsd && (
-                            <> (${fmtUsd(i.confirmedAmountUsd)})</>
-                        )}
-                        . Approve to continue with the received amount.
+                        Funds confirmed. Your deposit starts earning once it is
+                        activated.
                     </p>
-                    <Button
-                        className="h-[60px] text-[17px]"
-                        disabled={approve.isPending}
-                        onClick={() => approve.mutate()}
-                    >
-                        Approve received amount
-                    </Button>
-                </>
-            )}
+                )}
 
-            {i.status === "ready_to_activate" && (
-                <p>
-                    Funds confirmed. Your deposit starts earning once it is
-                    activated.
-                </p>
-            )}
-
-            {msg && <p className="text-sm text-[var(--hint)]">{msg}</p>}
-            <ErrorText
-                error={
-                    check.error || attach.error || approve.error || cancel.error
-                }
-            />
-        </Card>
+                {msg && <p className="text-sm text-[var(--hint)]">{msg}</p>}
+                <ErrorText
+                    error={
+                        check.error ||
+                        attach.error ||
+                        approve.error ||
+                        cancel.error
+                    }
+                />
+            </Card>
+        </div>
     );
 }
