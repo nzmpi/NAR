@@ -321,7 +321,12 @@ export function History() {
                             return (
                                 <button
                                     key={it.key}
-                                    onClick={() => setOpenKey(it.key)}
+                                    onClick={() => {
+                                        // Cancel errors belong to the sheet they happened in.
+                                        cancelW.reset();
+                                        cancelR.reset();
+                                        setOpenKey(it.key);
+                                    }}
                                     className={`flex w-full cursor-pointer items-center gap-3 px-4 py-3.5 text-left active:bg-[var(--row)] ${k ? "border-t border-[var(--row)]" : ""}`}
                                 >
                                     <span
