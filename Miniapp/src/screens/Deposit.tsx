@@ -551,8 +551,8 @@ function IntentCard({
                         >
                             {check.isPending ? "Checking…" : "I sent it"}
                         </Button>
-                        {/* Offered only once the user has said they sent it. */}
-                        {check.isSuccess && !enterHash && (
+                        {/* Offered once the user has said they sent it, even if the check failed. */}
+                        {(check.isSuccess || check.isError) && !enterHash && (
                             <Button
                                 variant="ghost"
                                 onClick={() => setEnterHash(true)}

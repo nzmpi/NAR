@@ -169,7 +169,11 @@ export function Withdraw() {
                 for (const x of lockLots) {
                     if (auto[x.lotId] === avail(x)) m[x.lotId] = true;
                     else if (auto[x.lotId])
-                        s[x.lotId] = formatUnits(auto[x.lotId], 6, 6);
+                        s[x.lotId] = formatUnits(
+                            auto[x.lotId],
+                            6,
+                            6,
+                        ).replaceAll(",", "");
                 }
             if (text === null) m[l.lotId] = true;
             else {
