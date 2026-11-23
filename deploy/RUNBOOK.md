@@ -12,6 +12,18 @@ All commands run in `deploy/` on the server. `DATABASE_URL` in `.env` is the Neo
    ```
 3. Log out and back in, then `docker ps` works without sudo.
 
+## Admin proxy secret (once)
+
+The Admin site on Vercel proxies `/admin/*` to the API through `Admin/middleware.ts`. The middleware adds a shared secret and the visitor's IP. The API refuses `/admin` requests without the secret (404), and admin sessions only work from the IP and browser that logged in.
+
+1. Make a secret: `openssl rand -hex 32`.
+2. Vercel → Admin project → Settings → Environment Variables: add `ADMIN_PROXY_SECRET` with that value (Production). Redeploy the Admin project.
+3. Server: add the same `ADMIN_PROXY_SECRET=` line to `deploy/.env`, then deploy the backend as below. With `APP_ENV=prod` the backend does not start without it.
+
+Rotate it the same way. Existing admin sessions stay valid. Admin is down between steps 2 and 3, so do them back to back.
+
+Sessions last 3 days without use and 10 days at most. A new IP (other Wi-Fi, VPN, router restart) or another browser logs you out; log in again.
+
 ## Fresh database
 
 1. Set `DATABASE_URL` and `TAG` in `.env`.

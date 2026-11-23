@@ -8,6 +8,7 @@ import { config } from "./config.js";
 import { db } from "./db/index.js";
 import { registerErrorHandler } from "./http/errors.js";
 import { adminAuthRoutes } from "./http/routes/adminAuth.js";
+import { hasProxySecret } from "./auth/adminSession.js";
 import { adminRoutes } from "./http/routes/admin.js";
 import { userRoutes } from "./http/routes/user.js";
 import { registerBotWebhook } from "./bot/bot.js";
@@ -50,6 +51,19 @@ export async function buildApp() {
         ],
     });
     registerErrorHandler(app);
+
+    // /admin is only served through the Admin Vercel middleware, which adds
+    // the proxy secret. Direct requests to the API host get 404.
+    if (config.ADMIN_PROXY_SECRET)
+        app.addHook("onRequest", async (req, reply) => {
+            // The matched route, not the raw URL, so encoded paths can't dodge it.
+            const route = req.routeOptions.url ?? "";
+            if (
+                (route === "/admin" || route.startsWith("/admin/")) &&
+                !hasProxySecret(req)
+            )
+                return reply.code(404).send({ error: "Not found" });
+        });
 
     app.get("/health", async () => ({ status: "ok" }));
     app.get("/health/db", async (_req, reply) => {

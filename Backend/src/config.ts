@@ -23,6 +23,9 @@ const schema = z.object({
     ADMIN_POST_LOGIN_URL: z.url().optional(),
 
     SESSION_SECRET: z.string().min(32),
+    // Shared with the Admin Vercel middleware, which adds it to every /admin
+    // request with the visitor's IP. Set: /admin requires it. Required in prod.
+    ADMIN_PROXY_SECRET: opt(z.string().min(32)),
     // Extra allowed browser origins (the Mini App origin), comma-separated.
     CORS_ORIGINS: z.string().default(""),
     INIT_DATA_MAX_AGE_SECONDS: z.coerce.number().int().positive().default(3600),
@@ -76,6 +79,8 @@ if (
     throw new Error(
         "APP_ENV=prod requires FACTORY_ADDRESS (the proxy), VAULT_ARTIFACT_PATH and VAULT_CREATION_CODE_HASH",
     );
+if (env.APP_ENV === "prod" && !env.ADMIN_PROXY_SECRET)
+    throw new Error("APP_ENV=prod requires ADMIN_PROXY_SECRET");
 const adminOrigin = new URL(env.ADMIN_ORIGIN).origin;
 const rpcUrls: Record<number, string[]> = {};
 for (const [k, v] of Object.entries(process.env)) {

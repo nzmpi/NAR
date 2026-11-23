@@ -49,7 +49,7 @@ Mark a step done by changing `[ ]` to `[x]`.
 ## 4. Vercel setup (Admin + Miniapp)
 
 - [x] **Miniapp project** — build `Miniapp/`, set `VITE_API_URL=https://nzmpi.duckdns.org`. It authenticates with a header, so cross-site is fine.
-- [x] **Admin rewrites** — `Admin/vercel.json` rewrites `/admin/*` (all API calls and the OIDC callback) to the backend, so the browser sees one site and the `SameSite=Lax` cookie works.
+- [x] **Admin rewrites** — `Admin/middleware.ts` (Vercel Routing Middleware) proxies `/admin/*` (all API calls and the OIDC callback) to the backend, so the browser sees one site and the `SameSite=Lax` cookie works. It replaced the `vercel.json` rewrite.
 - [x] **Admin project** — `Admin/vercel.json` points at `nzmpi.duckdns.org` (done). Create the Vercel project with root `Admin/` and `VITE_API_URL` unset.
 - [x] **Admin callback** — set `ADMIN_ORIGIN` and `ADMIN_CALLBACK_URL` to the Admin Vercel URL, so the OIDC callback also goes through the rewrite.
 - [x] **CORS** — set `CORS_ORIGINS` on the backend to the Miniapp Vercel URL.
@@ -74,6 +74,8 @@ Mark a step done by changing `[ ]` to `[x]`.
 - [x] **Manager deposits** — admins see a Manager pool option in the Mini App deposit form (`/me` returns `isAdmin`).
 - [x] **Manager withdrawals** — the Mini App shows manager funds to admins and counts them as fee-free in the withdraw form.
 - [x] **Yearly lot caps** — profit is split by NAV with the manager, then by value × APY across user lots; each lot earns in full up to a yearly cap (value × tier APY), then 1/10.
+- [x] **Week-long admin session** — sliding session: 3 days idle, 10 days max, bound to the login IP and browser. `/admin` on the API host needs the proxy secret that only the Vercel middleware sends.
+- [ ] **Admin proxy secret** — set the same random `ADMIN_PROXY_SECRET` in the Admin Vercel project and in the server `.env`, then deploy both (`deploy/RUNBOOK.md`).
 - [ ] **Accounting flow** — settlement (incl. large-move guard), maturity, relock, bonus.
 - [x] **Withdrawal lock** — the admin locks a pending withdrawal before sending funds, so the user cannot cancel between payout and "mark paid". Admin shows "Mark paid" only after the lock.
 - [ ] **Withdrawal flow** — quote with early fee, reserve, cancel, reject, pay, notification.
