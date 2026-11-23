@@ -1,41 +1,107 @@
 @import "tailwindcss";
 
 :root {
-    --bg: #f6f7f9; --card: #ffffff; --nav: #ffffff; --line: #e6e8ec; --row: #eef0f3;
-    --fg: #0f1419; --hint: #5b6472; --soft: #4a5361;
-    --btn: #2f5bea; --btn-fg: #ffffff; --link: #1e44c4; --accent-soft: #ebf0fe; --accent-ink: #1e44c4;
-    --good: #0f7b4d; --good-soft: #e3f4ea; --bad: #b42318; --bad-soft: #fde7e4;
-    --warn: #8a4f00; --warn-soft: #fdf0dc; --warn-line: #f3ddb4; --muted-soft: #eef0f3;
-    --seg: #eaecf0; --seg-on: #ffffff; --hero: #eef2fe; --hero-line: #d9e2fc; --hero-label: #3b4a6b;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --nav: #ffffff;
+    --line: #e6e8ec;
+    --row: #eef0f3;
+    --fg: #0f1419;
+    --hint: #5b6472;
+    --soft: #4a5361;
+    --btn: #2f5bea;
+    --btn-fg: #ffffff;
+    --link: #1e44c4;
+    --accent-soft: #ebf0fe;
+    --accent-ink: #1e44c4;
+    --good: #0f7b4d;
+    --good-soft: #e3f4ea;
+    --bad: #b42318;
+    --bad-soft: #fde7e4;
+    --warn: #8a4f00;
+    --warn-soft: #fdf0dc;
+    --warn-line: #f3ddb4;
+    --muted-soft: #eef0f3;
+    --seg: #eaecf0;
+    --seg-on: #ffffff;
+    --hero: #eef2fe;
+    --hero-line: #d9e2fc;
+    --hero-label: #3b4a6b;
     --admin: #7c3aed;
-    --field: #ffffff; --hover: #eef0f4; --track: #e3e7ee;
+    --field: #ffffff;
+    --hover: #eef0f4;
+    --track: #e3e7ee;
     --chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235b6472' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
     color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
     :root {
-        --bg: #0b0e12; --card: #14181e; --nav: #111419; --line: #222831; --row: #1e232b;
-        --fg: #e8ebef; --hint: #9aa3af; --soft: #b4bcc7;
-        --btn: #3e5eeb; --btn-fg: #ffffff; --link: #8fa5ff; --accent-soft: #1d2748; --accent-ink: #b7c6ff;
-        --good: #4ade9a; --good-soft: #10301f; --bad: #ff8a7a; --bad-soft: #3a1714;
-        --warn: #f5c77e; --warn-soft: #3a2a10; --warn-line: #4a3818; --muted-soft: #222831;
-        --seg: #171b21; --seg-on: #2a313c; --hero: #16223b; --hero-line: #24365e; --hero-label: #a9b8d6;
+        --bg: #0b0e12;
+        --card: #14181e;
+        --nav: #111419;
+        --line: #222831;
+        --row: #1e232b;
+        --fg: #e8ebef;
+        --hint: #9aa3af;
+        --soft: #b4bcc7;
+        --btn: #3e5eeb;
+        --btn-fg: #ffffff;
+        --link: #8fa5ff;
+        --accent-soft: #1d2748;
+        --accent-ink: #b7c6ff;
+        --good: #4ade9a;
+        --good-soft: #10301f;
+        --bad: #ff8a7a;
+        --bad-soft: #3a1714;
+        --warn: #f5c77e;
+        --warn-soft: #3a2a10;
+        --warn-line: #4a3818;
+        --muted-soft: #222831;
+        --seg: #171b21;
+        --seg-on: #2a313c;
+        --hero: #16223b;
+        --hero-line: #24365e;
+        --hero-label: #a9b8d6;
         --admin: #b794f6;
-        --field: #0f1216; --hover: #1b2028; --track: #252b34;
+        --field: #0f1216;
+        --hover: #1b2028;
+        --track: #252b34;
         --chev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa3af' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
         color-scheme: dark;
     }
 }
 @layer base {
     body {
-        margin: 0; background: var(--bg); color: var(--fg); font-size: 14px;
-        font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-size: 14px;
+        font-family:
+            Inter,
+            system-ui,
+            -apple-system,
+            "Segoe UI",
+            Roboto,
+            sans-serif;
     }
-    input, select, button, textarea { font: inherit; color: inherit; }
-    :focus-visible { outline: 2px solid var(--btn); outline-offset: 2px; }
+    input,
+    select,
+    button,
+    textarea {
+        font: inherit;
+        color: inherit;
+    }
+    :focus-visible {
+        outline: 2px solid var(--btn);
+        outline-offset: 2px;
+    }
 }
-.tnum { font-variant-numeric: tabular-nums; }
-.display { font-family: "Space Grotesk", Inter, system-ui, sans-serif; }
+.tnum {
+    font-variant-numeric: tabular-nums;
+}
+.display {
+    font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+}
 
 /* Dropdowns: pill control with a chevron. Browsers that support customizable
    selects also get a rounded menu; others keep their native menu. */
@@ -47,15 +113,43 @@
     background-size: 16px;
 }
 @supports (appearance: base-select) {
-    .sel, .sel::picker(select) { appearance: base-select; }
-    .sel { display: inline-flex; align-items: center; }
-    .sel::picker-icon { display: none; }
+    .sel,
     .sel::picker(select) {
-        margin-top: 6px; padding: 6px; border: 1px solid var(--line); border-radius: 16px;
-        background: var(--card); color: var(--fg); box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+        appearance: base-select;
     }
-    .sel option { padding: 8px 12px; border-radius: 999px; font-size: 13px; cursor: pointer; }
-    .sel option:hover, .sel option:focus-visible { background: var(--hover); outline: none; }
-    .sel option:checked { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
-    .sel option::checkmark { display: none; }
+    .sel {
+        display: inline-flex;
+        align-items: center;
+    }
+    .sel::picker-icon {
+        display: none;
+    }
+    .sel::picker(select) {
+        margin-top: 6px;
+        padding: 6px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--card);
+        color: var(--fg);
+        box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+    }
+    .sel option {
+        padding: 8px 12px;
+        border-radius: 999px;
+        font-size: 13px;
+        cursor: pointer;
+    }
+    .sel option:hover,
+    .sel option:focus-visible {
+        background: var(--hover);
+        outline: none;
+    }
+    .sel option:checked {
+        background: var(--accent-soft);
+        color: var(--accent-ink);
+        font-weight: 600;
+    }
+    .sel option::checkmark {
+        display: none;
+    }
 }

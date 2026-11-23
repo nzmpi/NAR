@@ -6,6 +6,7 @@ import { ErrorBoundary, Hint } from "./components/ui";
 import { Overview } from "./screens/Overview";
 import { Settlement } from "./screens/Settlement";
 import { Withdrawals } from "./screens/Withdrawals";
+import { Relocks } from "./screens/Relocks";
 import { Settlements } from "./screens/Settlements";
 import { Audit } from "./screens/Audit";
 import { Deposits, NEEDS_ACTION } from "./screens/Deposits";
@@ -19,6 +20,7 @@ const ICON = {
     deposits: "M12 4v12M6 10l6 6 6-6M4 20h16",
     transfers: "M4 8h14l-4-4M20 16H6l4 4",
     withdrawals: "M12 20V8M6 14l6-6 6 6M4 4h16",
+    relocks: "M4 12a8 8 0 0114-5.3M20 12a8 8 0 01-14 5.3M18 3v4h-4M6 21v-4h4",
     settlement: "M5 12l5 5L20 7",
     settlements: "M12 8v4l3 2M3.5 12a8.5 8.5 0 1 0 2.5-6M3 4v4h4",
     users: "M9 11.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c1.8.7 3 2.5 3.5 5.2",
@@ -41,6 +43,7 @@ const GROUPS: { label: string; items: [Tab, string][] }[] = [
             ["deposits", "Deposits"],
             ["transfers", "Transfers"],
             ["withdrawals", "Withdrawals"],
+            ["relocks", "Relocks"],
         ],
     },
     {
@@ -268,6 +271,7 @@ function Shell({
                         {tab === "deposits" && <Deposits />}
                         {tab === "transfers" && <Transfers />}
                         {tab === "withdrawals" && <Withdrawals />}
+                        {tab === "relocks" && <Relocks />}
                         {tab === "settlement" && <Settlement go={setTab} />}
                         {tab === "settlements" && <Settlements />}
                         {tab === "audit" && <Audit />}

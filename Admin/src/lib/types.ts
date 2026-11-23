@@ -1,4 +1,11 @@
 export type PoolKey = "liquid" | "lock_1m" | "lock_2m" | "lock_3m" | "manager";
+export const POOL_NAME: Record<string, string> = {
+    liquid: "Liquid",
+    lock_1m: "Lock 1M",
+    lock_2m: "Lock 2M",
+    lock_3m: "Lock 3M",
+    manager: "Manager",
+};
 
 export interface AdminPools {
     totalAssetsUsd: string;
@@ -206,5 +213,29 @@ export interface AdminUserPortfolio {
         pool: string;
         valueUsd: string;
         maturesAt: string | null;
+    }[];
+}
+
+export interface AdminRelock {
+    request: {
+        id: string;
+        userId: string;
+        status: string;
+        settlementId: string | null;
+        appliedAt: string | null;
+        createdAt: string;
+    };
+    telegramId: string;
+    username: string | null;
+    items: {
+        id: string;
+        sourcePool?: PoolKey;
+        targetPool?: PoolKey;
+        amountUsd: string | null;
+        isMax: boolean;
+        reservedUsd: string | null;
+        status: string;
+        failureReason: string | null;
+        appliedUsd: string | null;
     }[];
 }
