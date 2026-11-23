@@ -1,9 +1,3 @@
 {
-    "$schema": "https://openapi.vercel.sh/vercel.json",
-    "rewrites": [
-        {
-            "source": "/admin/:path*",
-            "destination": "https://nzmpi.duckdns.org/admin/:path*"
-        }
-    ]
+    "$schema": "https://openapi.vercel.sh/vercel.json"
 }

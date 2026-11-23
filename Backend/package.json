@@ -9,7 +9,7 @@
     "start": "node dist/server.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "test": "tsx scripts/units-check.ts && tsx scripts/accounting-check.ts && tsx scripts/integration-check.ts && tsx scripts/withdrawals-check.ts && tsx scripts/relocks-check.ts && tsx scripts/history-check.ts && tsx scripts/allowlist-check.ts && tsx scripts/heartbeat-check.ts",
+    "test": "tsx scripts/units-check.ts && tsx scripts/accounting-check.ts && tsx scripts/integration-check.ts && tsx scripts/withdrawals-check.ts && tsx scripts/relocks-check.ts && tsx scripts/history-check.ts && tsx scripts/allowlist-check.ts && tsx scripts/heartbeat-check.ts && tsx scripts/admin-session-check.ts",
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx}\""
   },
   "keywords": [],

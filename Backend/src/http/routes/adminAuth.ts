@@ -14,10 +14,10 @@ import {
 import { signToken, verifyToken } from "../../auth/session.js";
 import { AppError } from "../../errors.js";
 import { ADMIN_COOKIE, requireAdmin } from "../auth.js";
+import { issueAdminSession } from "../../auth/adminSession.js";
 
 const FLOW_COOKIE = "nar_oidc";
 const FLOW_TTL = 600;
-const SESSION_TTL = 8 * 3600;
 
 const safeEqual = (a: string, b: string) => {
     const x = Buffer.from(a),
@@ -82,18 +82,7 @@ export async function adminAuthRoutes(app: FastifyInstance) {
             .limit(1);
         if (!adm) throw new AppError("Not an administrator", 403, "forbidden");
 
-        const session = await signToken(
-            { adm: adm.id, t: Date.now() }, // ms issue time, for revocation
-            SESSION_TTL,
-            "admin-session",
-        );
-        reply.setCookie(ADMIN_COOKIE, session, {
-            httpOnly: true,
-            secure: config.COOKIE_SECURE,
-            sameSite: "lax",
-            path: "/",
-            maxAge: SESSION_TTL,
-        });
+        await issueAdminSession(req, reply, adm.id, Date.now());
         return reply.redirect(config.ADMIN_POST_LOGIN_URL);
     });
 

@@ -1,11 +1,18 @@
 import "fastify";
-import type { FastifyRequest } from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import { and, eq } from "drizzle-orm";
 import { config } from "../config.js";
 import { db } from "../db/index.js";
 import { admins, users } from "../db/schema.js";
 import { validateInitData } from "../auth/initData.js";
 import { verifyToken } from "../auth/session.js";
+import {
+    ADMIN_COOKIE,
+    REFRESH_AFTER_MS,
+    adminClientIp,
+    issueAdminSession,
+    userAgentHash,
+} from "../auth/adminSession.js";
 import { AppError } from "../errors.js";
 import { hasAccess } from "../services/allowlist.js";
 
@@ -21,7 +28,7 @@ declare module "fastify" {
     }
 }
 
-export const ADMIN_COOKIE = "nar_admin";
+export { ADMIN_COOKIE } from "../auth/adminSession.js";
 
 // Mini App user: `Authorization: tma <initData>`. No separate login.
 export async function requireUser(req: FastifyRequest) {
@@ -69,18 +76,24 @@ export async function requireUser(req: FastifyRequest) {
 
 // Dashboard admin: signed httpOnly session cookie from Telegram Login (OIDC).
 // State-changing requests also need the custom header and exact Origin (CSRF).
-export async function requireAdmin(req: FastifyRequest) {
+// Sessions slide: 3 days idle, 10 days max (see adminSession.ts), and only
+// work from the IP and browser they were issued to.
+export async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
     const token = req.cookies[ADMIN_COOKIE];
     if (!token) throw new AppError("Unauthorized", 401, "unauthorized");
 
-    let adminId: string, issuedMs: number;
+    let adminId: string, issuedMs: number, iatMs: number;
     try {
         const payload = await verifyToken(token, "admin-session");
+        if (
+            typeof payload.t !== "number" ||
+            payload.ip !== adminClientIp(req) ||
+            payload.ua !== userAgentHash(req)
+        )
+            throw new Error("session bound elsewhere");
         adminId = String(payload.adm);
-        issuedMs =
-            typeof payload.t === "number"
-                ? payload.t
-                : (payload.iat ?? 0) * 1000;
+        issuedMs = payload.t;
+        iatMs = (payload.iat ?? 0) * 1000;
     } catch {
         throw new AppError("Unauthorized", 401, "unauthorized");
     }
@@ -104,4 +117,6 @@ export async function requireAdmin(req: FastifyRequest) {
     )
         throw new AppError("Unauthorized", 401, "unauthorized");
     req.admin = { id: a.id, telegramId: a.telegramId };
+    if (Date.now() - iatMs > REFRESH_AFTER_MS)
+        await issueAdminSession(req, reply, a.id, issuedMs);
 }
