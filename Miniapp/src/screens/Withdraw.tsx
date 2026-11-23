@@ -267,9 +267,9 @@ export function Withdraw() {
                     >
                         {submit.isPending
                             ? "Submitting…"
-                            : "Confirm withdrawal →"}
+                            : "Confirm withdrawal"}
                     </Button>
-                    <Button variant="ghost" onClick={() => setQuote(null)}>
+                    <Button variant="danger" onClick={() => setQuote(null)}>
                         Cancel
                     </Button>
                 </div>
