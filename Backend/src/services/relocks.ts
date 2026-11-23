@@ -340,6 +340,18 @@ export async function applyPendingRelocks(
                     BigInt(lot.reservedShares) - reserved
                 ).toString(),
                 principalUsd: (BigInt(lot.principalUsd) - carried).toString(),
+                // The cap is split by shares between the part that stays and
+                // the new lot, so relocking never adds cap.
+                ...(lot.capBaseUsd !== null && {
+                    capBaseUsd: (
+                        (BigInt(lot.capBaseUsd) * newShares) /
+                        lotShares
+                    ).toString(),
+                    capUsedUsd: (
+                        (BigInt(lot.capUsedUsd) * newShares) /
+                        lotShares
+                    ).toString(),
+                }),
                 closedAt: newShares === 0n ? now : null,
                 updatedAt: now,
             })
@@ -357,6 +369,17 @@ export async function applyPendingRelocks(
                 sourceType: "relock",
                 sourceId: item.id,
                 parentLotId: lot.id,
+                capYearStart: lot.capYearStart,
+                ...(lot.capBaseUsd !== null && {
+                    capBaseUsd: (
+                        (BigInt(lot.capBaseUsd) * burnShares) /
+                        lotShares
+                    ).toString(),
+                    capUsedUsd: (
+                        (BigInt(lot.capUsedUsd) * burnShares) /
+                        lotShares
+                    ).toString(),
+                }),
             })
             .returning({ id: positionLots.id });
 

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import * as s from "../src/db/schema.js";
 import {
     activateDeposit,
@@ -351,6 +351,48 @@ await settleManual(db, {
     now: day(366),
 });
 ok(true, "<10% NAV move needs no confirmation");
+{
+    // Bob's open lot (his 1m lot matured into liquid at day 365).
+    const lotNow = async () =>
+        (
+            await db
+                .select()
+                .from(s.positionLots)
+                .where(
+                    and(
+                        eq(s.positionLots.userId, bob.id),
+                        isNull(s.positionLots.closedAt),
+                    ),
+                )
+        )[0];
+    const l1 = await lotNow();
+    ok(
+        l1.capBaseUsd !== null && BigInt(l1.capUsedUsd) > 0n,
+        "settlement records the lot's yearly cap use",
+    );
+    ok(
+        l1.capYearStart!.getTime() === bobLot.openedAt.getTime(),
+        "maturity lot keeps the parent's lot-year",
+    );
+    // Zero P&L, so nothing is credited: used must be exactly 0 after the reset.
+    await settleManual(db, {
+        adminId: admin.id,
+        reportedTotalUsd: 12_600n * U,
+        now: day(1_100),
+    });
+    const l2 = await lotNow();
+    const yearMs = 365 * 86_400_000;
+    const years =
+        (l2.capYearStart!.getTime() - bobLot.openedAt.getTime()) / yearMs;
+    ok(
+        years ===
+            Math.floor(
+                (day(1_100).getTime() - bobLot.openedAt.getTime()) / yearMs,
+            ),
+        "cap year advances by whole lot-years",
+    );
+    ok(l2.capUsedUsd === "0", "cap use reset at the anniversary");
+}
 {
     const listed = await adminListUsers(db);
     ok(

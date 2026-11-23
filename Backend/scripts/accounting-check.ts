@@ -7,7 +7,7 @@ import {
     applyWithdrawal,
     quoteWithdrawal,
 } from "../src/accounting/actions.js";
-import { settle } from "../src/accounting/settle.js";
+import { settle, type LotInput } from "../src/accounting/settle.js";
 
 const U = 1_000_000n;
 const YEAR = 365n * 86_400n;
@@ -29,21 +29,89 @@ p = applyDeposit(p, "liquid", 1_000n * U).pools;
 p = applyDeposit(p, "lock_3m", 1_000n * U).pools;
 const t0 = 0n,
     t1 = YEAR;
+const lots = (capL = 60n * U, capK = 100n * U): LotInput[] => [
+    {
+        lotId: "L",
+        poolKey: "liquid",
+        shares: p.liquid.shares,
+        apyBps: 600,
+        capLeftUsd: capL,
+    },
+    {
+        lotId: "K",
+        poolKey: "lock_3m",
+        shares: p.lock_3m.shares,
+        apyBps: 1000,
+        capLeftUsd: capK,
+    },
+];
+const near = (a: bigint, b: bigint) => a - b <= 2n && b - a <= 2n;
+const credit = (
+    r: { lotCredits: { lotId: string; amountUsd: bigint }[] },
+    id: string,
+) => r.lotCredits.find((c) => c.lotId === id)?.amountUsd ?? 0n;
 
-// Profit: reported 12,500 on 12,000 -> caps 6%+10% of 1000 = 160 < 500
+// Profit 500 on 12,000: manager takes its NAV share (10/12), users split the
+// rest by value * APY (6:10), both under their yearly caps.
 let r = settle({
     pools: p,
     reportedTotalUsd: 12_500n * U,
     intervalStart: t0,
     settledAt: t1,
+    lots: lots(),
 });
 assert(totalAssets(r.pools) === 12_500n * U, "positive: sum == reported");
+const users = 500n * U - (500n * U * 10n) / 12n;
 assert(
-    r.pools.liquid.assets >= 1_060n * U - 1n &&
-        r.pools.liquid.assets <= 1_060n * U,
-    "liquid +6%",
+    near(credit(r, "L"), (users * 6n) / 16n),
+    "liquid gets 6/16 of user part",
 );
-assert(r.pools.lock_3m.assets >= 1_099_999_000n, "3m +10%");
+assert(near(credit(r, "K"), (users * 10n) / 16n), "3m gets 10/16 of user part");
+assert(
+    r.pools.liquid.assets === 1_000n * U + credit(r, "L"),
+    "lot credit lands in its pool",
+);
+
+// Over cap: 3m lot has 10 left of its yearly cap -> 10 + 1/10 of the rest
+const rc = settle({
+    pools: p,
+    reportedTotalUsd: 12_500n * U,
+    intervalStart: t0,
+    settledAt: t1,
+    lots: lots(60n * U, 10n * U),
+});
+const k = (users * 10n) / 16n;
+assert(
+    near(credit(rc, "K"), 10n * U + (k - 10n * U) / 10n),
+    "over cap: full share up to cap, then 1/10",
+);
+assert(totalAssets(rc.pools) === 12_500n * U, "over cap: sum == reported");
+assert(
+    rc.pools.manager.assets > r.pools.manager.assets,
+    "over-cap remainder goes to manager",
+);
+
+// User's example: users 1,000 and manager 1,000, profit 10 -> 5 each
+let h = emptyPools();
+h = applyDeposit(h, "manager", 1_000n * U).pools;
+h = applyDeposit(h, "liquid", 1_000n * U).pools;
+const rh = settle({
+    pools: h,
+    reportedTotalUsd: 2_010n * U,
+    intervalStart: 0n,
+    settledAt: 86_400n,
+    lots: [
+        {
+            lotId: "L",
+            poolKey: "liquid",
+            shares: h.liquid.shares,
+            apyBps: 600,
+            capLeftUsd: 60n * U,
+        },
+    ],
+});
+assert(credit(rh, "L") === 5n * U, "50/50 split: users 5");
+assert(rh.pools.manager.assets === 1_005n * U, "50/50 split: manager 5");
 
 // Bonus 100 to a 3m lot
 const rb = settle({
@@ -51,7 +119,8 @@ const rb = settle({
     reportedTotalUsd: 12_500n * U,
     intervalStart: t0,
     settledAt: t1,
-    bonuses: [{ lotId: "L1", poolKey: "lock_3m", amountUsd: 100n * U }],
+    lots: lots(),
+    bonuses: [{ lotId: "K", poolKey: "lock_3m", amountUsd: 100n * U }],
 });
 assert(totalAssets(rb.pools) === 12_500n * U, "bonus: sum == reported");
 assert(
@@ -59,14 +128,6 @@ assert(
     "bonus lands in 3m pool",
 );
 
-// Insufficient profit: scaled caps
-const rs = settle({
-    pools: p,
-    reportedTotalUsd: 12_050n * U,
-    intervalStart: t0,
-    settledAt: t1,
-});
-assert(totalAssets(rs.pools) === 12_050n * U, "scaled caps, sum ok");
 // 8% vs 6% pools, equal NAV: earnings ratio must be 4/3
 let q2 = emptyPools();
 q2 = applyDeposit(q2, "manager", 1_000n * U).pools;
@@ -77,13 +138,38 @@ const r2 = settle({
     reportedTotalUsd: 3_010n * U,
     intervalStart: 0n,
     settledAt: YEAR,
+    lots: [
+        {
+            lotId: "A",
+            poolKey: "liquid",
+            shares: q2.liquid.shares,
+            apyBps: 600,
+            capLeftUsd: 60n * U,
+        },
+        {
+            lotId: "B",
+            poolKey: "lock_1m",
+            shares: q2.lock_1m.shares,
+            apyBps: 800,
+            capLeftUsd: 80n * U,
+        },
+    ],
 });
-const e6 = r2.pools.liquid.assets - 1_000n * U,
-    e8 = r2.pools.lock_1m.assets - 1_000n * U;
+const e6 = credit(r2, "A"),
+    e8 = credit(r2, "B");
 assert(
     e8 * 3n >= e6 * 4n - 4n && e8 * 3n <= e6 * 4n + 4n,
-    "shortfall: 8% pool earns 4/3 of 6% pool",
+    "8% lot earns 4/3 of 6% lot",
 );
+
+// No user lots: all profit to manager
+const rn = settle({
+    pools: p,
+    reportedTotalUsd: 12_500n * U,
+    intervalStart: t0,
+    settledAt: t1,
+});
+assert(rn.pools.manager.assets === 10_500n * U, "no lots: manager gets all");
 
 // Loss: same % everywhere
 const rl = settle({
@@ -96,23 +182,10 @@ assert(totalAssets(rl.pools) === 10_800n * U, "loss: sum == reported");
 assert(rl.pools.liquid.assets === 900n * U, "loss: liquid -10%");
 assert(rl.pools.manager.assets === 9_000n * U, "loss: manager -10%");
 
-// Maturity inside interval: 3m lot matured halfway -> earns less than full 10%
-const half = YEAR / 2n;
-const sh = p.lock_3m.shares;
-const rm = settle({
-    pools: p,
-    reportedTotalUsd: 12_500n * U,
-    intervalStart: t0,
-    settledAt: t1,
-    maturedLots: [{ poolKey: "lock_3m", shares: sh, maturesAt: half }],
-});
+// Maturity conversion conserves NAV
+const cv = applyMaturity(r.pools, "lock_3m", r.pools.lock_3m.shares);
 assert(
-    rm.pools.lock_3m.assets < r.pools.lock_3m.assets,
-    "matured lot earns < full tier rate",
-);
-const cv = applyMaturity(rm.pools, "lock_3m", sh);
-assert(
-    totalAssets(cv.pools) === totalAssets(rm.pools) &&
+    totalAssets(cv.pools) === totalAssets(r.pools) &&
         cv.pools.lock_3m.assets === 0n,
     "maturity conserves NAV",
 );

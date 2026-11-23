@@ -128,6 +128,27 @@ ok(
     lots.find((l) => l.key === "liquid")!.reserved === 0n,
     "source reservation cleared",
 );
+{
+    const row = async (id: string) =>
+        (
+            await db
+                .select()
+                .from(s.positionLots)
+                .where(eq(s.positionLots.id, id))
+        )[0];
+    const src = await row(liquid.id);
+    const moved = await row(lock2!.id);
+    ok(
+        moved.capYearStart!.getTime() === src.capYearStart!.getTime() &&
+            moved.capYearStart!.getTime() === src.openedAt.getTime(),
+        "relocked lot keeps the parent's lot-year",
+    );
+    ok(
+        BigInt(moved.capUsedUsd) > 0n &&
+            BigInt(moved.capBaseUsd!) + BigInt(src.capBaseUsd!) <= 1_000n * U,
+        "relock splits the parent's cap instead of adding a new one",
+    );
+}
 ok(
     (await h.totalNav()) === before + 10n * U,
     "relock is value-neutral (NAV == reported)",

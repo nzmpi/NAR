@@ -73,6 +73,7 @@ Mark a step done by changing `[ ]` to `[x]`.
 - [x] **Scan on demand** — the timed chain scan hit RPC rate limits. Admin **Check vaults** reads vault balances (Multicall3) and scans logs only for funded vaults.
 - [x] **Manager deposits** — admins see a Manager pool option in the Mini App deposit form (`/me` returns `isAdmin`).
 - [x] **Manager withdrawals** — the Mini App shows manager funds to admins and counts them as fee-free in the withdraw form.
+- [x] **Yearly lot caps** — profit is split by NAV with the manager, then by value × APY across user lots; each lot earns in full up to a yearly cap (value × tier APY), then 1/10.
 - [ ] **Accounting flow** — settlement (incl. large-move guard), maturity, relock, bonus.
 - [x] **Withdrawal lock** — the admin locks a pending withdrawal before sending funds, so the user cannot cancel between payout and "mark paid". Admin shows "Mark paid" only after the lock.
 - [ ] **Withdrawal flow** — quote with early fee, reserve, cancel, reject, pay, notification.
