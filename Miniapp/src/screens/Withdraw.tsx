@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, newKey } from "../lib/api";
 import { fmtUsd, formatUnits, parseUnits } from "../lib/money";
@@ -44,6 +44,15 @@ export function Withdraw() {
     const [max, setMax] = useState<Record<string, boolean>>({});
     const [quote, setQuote] = useState<WithdrawalQuote | null>(null);
     const [done, setDone] = useState("");
+    // The review card sits at the top; bring it into view when it opens.
+    const reviewRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (quote)
+            reviewRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+            });
+    }, [quote]);
 
     // Hooks stay above the loading return so their count never changes.
     const preview = useMutation({
@@ -160,7 +169,11 @@ export function Withdraw() {
                 for (const x of lockLots) {
                     if (auto[x.lotId] === avail(x)) m[x.lotId] = true;
                     else if (auto[x.lotId])
-                        s[x.lotId] = formatUnits(auto[x.lotId], 6, 6);
+                        s[x.lotId] = formatUnits(
+                            auto[x.lotId],
+                            6,
+                            6,
+                        ).replaceAll(",", "");
                 }
             if (text === null) m[l.lotId] = true;
             else {
@@ -210,6 +223,57 @@ export function Withdraw() {
                     </span>
                 )}
             </Header>
+            {quote && asset && (
+                <div
+                    ref={reviewRef}
+                    className="flex scroll-mt-4 flex-col gap-3"
+                >
+                    <Card className="flex flex-col gap-2">
+                        <h2 className="mb-1 text-[15px] font-semibold">
+                            Review
+                        </h2>
+                        <Row k="Amount" v={`$${fmtUsd(quote.grossUsd)}`} />
+                        <Row
+                            k="Early withdrawal fee (10%)"
+                            v={
+                                BigInt(quote.feeUsd) > 0n
+                                    ? `−$${fmtUsd(quote.feeUsd)}`
+                                    : "$0"
+                            }
+                            bad={BigInt(quote.feeUsd) > 0n}
+                        />
+                        <div className="flex justify-between border-t border-[var(--row)] pt-2 font-semibold">
+                            <span>You receive</span>
+                            <span className="display text-lg">
+                                {formatUnits(
+                                    quote.payoutAmount,
+                                    asset.decimals,
+                                    2,
+                                )}{" "}
+                                {asset.symbol}
+                            </span>
+                        </div>
+                        <p className="text-xs text-[var(--hint)]">
+                            Final amounts use the pool price when the payment is
+                            made and can differ slightly. The fee is fixed at
+                            the time you confirm.
+                        </p>
+                    </Card>
+                    <Button
+                        size="lg"
+                        className="w-full"
+                        disabled={submit.isPending}
+                        onClick={() => submit.mutate(body())}
+                    >
+                        {submit.isPending
+                            ? "Submitting…"
+                            : "Confirm withdrawal →"}
+                    </Button>
+                    <Button variant="ghost" onClick={() => setQuote(null)}>
+                        Cancel
+                    </Button>
+                </div>
+            )}
 
             <Card className="flex flex-col gap-3.5">
                 <Field label="Receive on">
@@ -374,58 +438,10 @@ export function Withdraw() {
                 >
                     {preview.isPending
                         ? "Calculating…"
-                        : (need ?? "Review withdrawal →")}
+                        : (need ?? "Review withdrawal")}
                 </Button>
             )}
 
-            {quote && asset && (
-                <>
-                    <Card className="flex flex-col gap-2">
-                        <h2 className="mb-1 text-[15px] font-semibold">
-                            Review
-                        </h2>
-                        <Row k="Amount" v={`$${fmtUsd(quote.grossUsd)}`} />
-                        <Row
-                            k="Early withdrawal fee (10%)"
-                            v={
-                                BigInt(quote.feeUsd) > 0n
-                                    ? `−$${fmtUsd(quote.feeUsd)}`
-                                    : "$0.00"
-                            }
-                            bad={BigInt(quote.feeUsd) > 0n}
-                        />
-                        <div className="flex justify-between border-t border-[var(--row)] pt-2 font-semibold">
-                            <span>You receive</span>
-                            <span className="display text-lg">
-                                {formatUnits(
-                                    quote.payoutAmount,
-                                    asset.decimals,
-                                    2,
-                                )}{" "}
-                                {asset.symbol}
-                            </span>
-                        </div>
-                        <p className="text-xs text-[var(--hint)]">
-                            Final amounts use the pool price when the payment is
-                            made and can differ slightly. The fee is fixed at
-                            the time you confirm.
-                        </p>
-                    </Card>
-                    <Button
-                        size="lg"
-                        className="w-full"
-                        disabled={submit.isPending}
-                        onClick={() => submit.mutate(body())}
-                    >
-                        {submit.isPending
-                            ? "Submitting…"
-                            : "Confirm withdrawal →"}
-                    </Button>
-                    <Button variant="ghost" onClick={() => setQuote(null)}>
-                        Back
-                    </Button>
-                </>
-            )}
             {done && <p className="text-sm text-[var(--good)]">{done}</p>}
         </div>
     );

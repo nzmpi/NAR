@@ -428,6 +428,14 @@ function IntentCard({
     }, [focus]);
     const [hash, setHash] = useState("");
     const [msg, setMsg] = useState("");
+    const [copied, setCopied] = useState(false);
+    const [showToken, setShowToken] = useState(false);
+    const [enterHash, setEnterHash] = useState(false);
+    useEffect(() => {
+        if (!copied) return;
+        const t = setTimeout(() => setCopied(false), 2000);
+        return () => clearTimeout(t);
+    }, [copied]);
     const asset = assets.find((a) => a.assetId === i.assetId);
     const vault = vaults.find((v) => v.id === i.vaultId);
     const refresh = () => {
@@ -476,7 +484,18 @@ function IntentCard({
     });
 
     const dec = asset?.decimals ?? 6;
-    const sym = asset?.symbol ?? "";
+    // Tapping the token name shows its full contract address.
+    const sym = asset ? (
+        <button
+            onClick={() => setShowToken(!showToken)}
+            aria-expanded={showToken}
+            className="cursor-pointer underline decoration-dotted underline-offset-2"
+        >
+            {asset.symbol}
+        </button>
+    ) : (
+        ""
+    );
     const intended = formatUnits(i.intendedAmount, dec, 2);
 
     return (
@@ -488,6 +507,14 @@ function IntentCard({
                     </span>
                     <StatusBadge status={i.status} />
                 </div>
+                {showToken && asset && (
+                    <p className="-mt-1.5 text-xs text-[var(--hint)]">
+                        {asset.symbol} contract on {asset.chainName}:{" "}
+                        <span className="font-mono break-all text-[var(--fg)]">
+                            {asset.tokenAddress}
+                        </span>
+                    </p>
+                )}
 
                 {i.status === "intent" && vault && asset && (
                     <>
@@ -507,10 +534,10 @@ function IntentCard({
                             onClick={() =>
                                 navigator.clipboard
                                     ?.writeText(vault.address)
-                                    .then(() => setMsg("Address copied."))
+                                    .then(() => setCopied(true))
                             }
                         >
-                            Copy address
+                            {copied ? "Address copied ✓" : "Copy address"}
                         </Button>
                         <p className="text-xs text-[var(--hint)]">
                             Valid until {new Date(i.expiresAt).toLocaleString()}
@@ -519,17 +546,22 @@ function IntentCard({
                                 " Your vault is created when the deposit is processed; it is safe to send before that."}
                         </p>
                         <Button
-                            className="h-[60px] text-[17px]"
                             disabled={check.isPending}
                             onClick={() => check.mutate()}
                         >
                             {check.isPending ? "Checking…" : "I sent it"}
                         </Button>
-                        <details className="text-[13px]">
-                            <summary className="cursor-pointer font-medium text-[var(--link)]">
+                        {/* Offered once the user has said they sent it, even if the check failed. */}
+                        {(check.isSuccess || check.isError) && !enterHash && (
+                            <Button
+                                variant="ghost"
+                                onClick={() => setEnterHash(true)}
+                            >
                                 Not detected? Enter the transaction hash
-                            </summary>
-                            <div className="mt-2.5 flex gap-2">
+                            </Button>
+                        )}
+                        {enterHash && (
+                            <div className="flex gap-2">
                                 <Input
                                     value={hash}
                                     onChange={(e) => setHash(e.target.value)}
@@ -549,14 +581,16 @@ function IntentCard({
                                     Send
                                 </Button>
                             </div>
-                        </details>
-                        <button
-                            className="cursor-pointer self-end py-1 text-[13px] font-semibold text-[var(--bad)] disabled:opacity-50"
+                        )}
+                        <Button
+                            variant="danger"
                             disabled={cancel.isPending}
                             onClick={() => cancel.mutate()}
                         >
-                            Cancel deposit
-                        </button>
+                            {cancel.isPending
+                                ? "Cancelling…"
+                                : "Cancel deposit"}
+                        </Button>
                     </>
                 )}
 
