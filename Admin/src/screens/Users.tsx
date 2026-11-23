@@ -22,6 +22,8 @@ import {
     Select,
     TD,
     TH,
+    PAGE,
+    ShowMore,
     explorerUrl,
 } from "../components/ui";
 
@@ -41,9 +43,10 @@ export function Users() {
     const [vf, setVf] = useState<VaultFilter>("any");
     const [bf, setBf] = useState<BalanceFilter>("any");
     const [open, setOpen] = useState<string | null>(null);
+    const [limit, setLimit] = useState(PAGE);
     const q = useQuery({
-        queryKey: ["admin-users"],
-        queryFn: () => api<AdminUser[]>("/admin/users"),
+        queryKey: ["admin-users", limit],
+        queryFn: () => api<AdminUser[]>(`/admin/users?limit=${limit}`),
     });
 
     const users = q.data ?? [];
@@ -247,6 +250,11 @@ export function Users() {
                             </tbody>
                         </table>
                     </div>
+                    <ShowMore
+                        count={users.length}
+                        limit={limit}
+                        onMore={() => setLimit(limit + PAGE)}
+                    />
                     {rows.length > 100 && (
                         <div className="border-t border-[var(--row)] px-5 py-3">
                             <Hint>

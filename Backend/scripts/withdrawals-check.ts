@@ -101,6 +101,20 @@ ok(
     "cancel releases reservation",
 );
 
+// Payout addresses that would lose or strand money are refused
+await rejects(
+    requestWithdrawal(db, req(alice.id, 100n * U, {}, "0x" + "00".repeat(20))),
+    "zero payout address refused",
+);
+const [aliceVault] = await db
+    .select()
+    .from(s.vaults)
+    .where(eq(s.vaults.userId, alice.id));
+await rejects(
+    requestWithdrawal(db, req(alice.id, 100n * U, {}, aliceVault.address)),
+    "vault payout address refused",
+);
+
 // Locked by the admin: the user cannot cancel, the admin can still reject
 const wl = await requestWithdrawal(db, req(alice.id, 100n * U));
 await lockWithdrawal(db, { withdrawalId: wl.withdrawalId, adminId: admin.id });
@@ -146,6 +160,20 @@ await rejects(
 );
 
 // Pay: settle first, then burn. Pool NAV drops by the net payout only.
+// Paying needs the lock first (the member cannot cancel after it).
+await rejects(
+    markWithdrawalPaid(db, {
+        withdrawalId: w2.withdrawalId,
+        adminId: admin.id,
+        txHash: h.hash(),
+        reportedTotalUsd: 12_400n * U,
+        confirmLargeMove: true,
+        sentAmount: w2.payoutAmount,
+        now: day(30),
+    }),
+    "paid without lock refused",
+);
+await lockWithdrawal(db, { withdrawalId: w2.withdrawalId, adminId: admin.id });
 await rejects(
     markWithdrawalPaid(db, {
         withdrawalId: w2.withdrawalId,
@@ -153,6 +181,7 @@ await rejects(
         txHash: "0x12",
         reportedTotalUsd: 12_400n * U,
         confirmLargeMove: true,
+        sentAmount: w2.payoutAmount,
         now: day(30),
     }),
     "bad tx hash rejected",
@@ -163,12 +192,18 @@ const paid = await markWithdrawalPaid(db, {
     txHash: h.hash(),
     reportedTotalUsd: 12_400n * U,
     confirmLargeMove: true,
+    sentAmount: w2.payoutAmount,
     now: day(30),
 });
 ok((await status(w2.withdrawalId)) === "paid", "paid");
 ok(paid.grossUsd >= 1_100n * U, "gross at settled prices >= quote (NAV grew)");
 ok(paid.feeUsd > 0n && paid.feeUsd < 20n * U, "fee ~10% of lock portion");
 ok(paid.netUsd === paid.grossUsd - paid.feeUsd, "net = gross - fee");
+ok(
+    (await h.openLots(alice.id)).find((l) => l.id === lock.id)!.principal <
+        lock.principal,
+    "principal drops with the paid share",
+);
 ok(
     (await h.totalNav()) === 12_400n * U - paid.netUsd,
     "pool NAV == reported - net payout (fee stays in manager pool)",
@@ -180,6 +215,7 @@ await rejects(
         txHash: h.hash(),
         reportedTotalUsd: 12_400n * U,
         confirmLargeMove: true,
+        sentAmount: w2.payoutAmount,
         now: day(31),
     }),
     "cannot pay twice",

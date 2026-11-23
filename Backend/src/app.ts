@@ -21,7 +21,15 @@ import { workerStatus } from "./heartbeat.js";
 
 export async function buildApp() {
     const app = Fastify({
-        logger: true,
+        // Log the path only: the login callback query carries a one-time code.
+        logger: {
+            serializers: {
+                req: (req: { method: string; url: string }) => ({
+                    method: req.method,
+                    url: req.url.split("?")[0],
+                }),
+            },
+        },
         trustProxy:
             config.TRUST_PROXY_HOPS > 0
                 ? String(config.TRUST_PROXY_HOPS)

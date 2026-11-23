@@ -299,3 +299,24 @@ export function Onchain({
         </a>
     );
 }
+
+// Lists are newest-first and capped by the server; "Show more" asks for a larger page.
+export const PAGE = 200;
+export function ShowMore({
+    count,
+    limit,
+    onMore,
+}: {
+    count: number;
+    limit: number;
+    onMore: () => void;
+}) {
+    if (count < limit) return null;
+    return (
+        <div className="flex justify-center">
+            <Button variant="ghost" onClick={onMore}>
+                Show more
+            </Button>
+        </div>
+    );
+}

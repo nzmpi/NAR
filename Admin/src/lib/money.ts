@@ -17,7 +17,8 @@ export function formatUnits(
         .slice(0, maxFrac);
     frac = frac.padEnd(maxFrac, "0");
     const w = whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-    return `${neg ? "-" : ""}${w}${maxFrac > 0 ? "." + frac : ""}`;
+    // Whole amounts drop the cents: "60", not "60.00"; "60.50" keeps both.
+    return `${neg ? "-" : ""}${w}${/[1-9]/.test(frac) ? "." + frac : ""}`;
 }
 
 export const fmtUsd = (micro: string | bigint, maxFrac = 2) =>

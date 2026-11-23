@@ -269,7 +269,11 @@ export async function adminPools(database: Database) {
     };
 }
 
-export function adminListDeposits(database: Database, status?: string) {
+export function adminListDeposits(
+    database: Database,
+    status?: string,
+    limit = LIMIT,
+) {
     return database
         .select({
             intent: depositIntents,
@@ -288,7 +292,7 @@ export function adminListDeposits(database: Database, status?: string) {
         .innerJoin(chains, eq(chains.id, assets.chainId))
         .where(status ? eq(depositIntents.status, status) : undefined)
         .orderBy(desc(depositIntents.createdAt))
-        .limit(LIMIT);
+        .limit(limit);
 }
 
 export function adminListTransfers(database: Database, unmatchedOnly: boolean) {
@@ -300,7 +304,11 @@ export function adminListTransfers(database: Database, unmatchedOnly: boolean) {
         .limit(LIMIT);
 }
 
-export function adminListWithdrawals(database: Database, status?: string) {
+export function adminListWithdrawals(
+    database: Database,
+    status?: string,
+    limit = LIMIT,
+) {
     return database
         .select({
             withdrawal: withdrawals,
@@ -316,12 +324,16 @@ export function adminListWithdrawals(database: Database, status?: string) {
         .innerJoin(chains, eq(chains.id, assets.chainId))
         .where(status ? eq(withdrawals.status, status) : undefined)
         .orderBy(desc(withdrawals.createdAt))
-        .limit(LIMIT);
+        .limit(limit);
 }
 
 // Relock requests with their user and items. Each item names its source
 // tier and the current value of its reserved shares (what a "max" moves).
-export async function adminListRelocks(database: Database, status?: string) {
+export async function adminListRelocks(
+    database: Database,
+    status?: string,
+    limit = LIMIT,
+) {
     const rs = await database
         .select({
             request: relockRequests,
@@ -332,7 +344,7 @@ export async function adminListRelocks(database: Database, status?: string) {
         .innerJoin(users, eq(users.id, relockRequests.userId))
         .where(status ? eq(relockRequests.status, status) : undefined)
         .orderBy(desc(relockRequests.createdAt))
-        .limit(LIMIT);
+        .limit(limit);
     if (!rs.length) return [];
     const items = await database
         .select({ item: relockItems, sourcePoolId: positionLots.poolId })
@@ -373,12 +385,12 @@ export async function adminListRelocks(database: Database, status?: string) {
 // vault count, so the admin list can filter without a call per user.
 // A vault is one address (nonce) deployed per chain, so count distinct
 // nonces: that is what maxVaults limits.
-export async function adminListUsers(database: Database) {
+export async function adminListUsers(database: Database, limit = LIMIT) {
     const list = await database
         .select()
         .from(users)
         .orderBy(desc(users.createdAt))
-        .limit(LIMIT);
+        .limit(limit);
     if (list.length === 0) return [];
     const ids = list.map((u) => u.id);
     const { state, keyById } = await readPools(database);

@@ -40,7 +40,15 @@ import {
     checkIntent,
 } from "../../services/transferScanner.js";
 import { ensureVaults } from "../../services/vaults.js";
+import { AppError } from "../../errors.js";
 import { userLimit } from "../limits.js";
+import { config } from "../../config.js";
+
+// The Factory contract is never a payout destination (the route knows the config).
+const notFactory = (addr: string) => {
+    if (addr.toLowerCase() === config.FACTORY_ADDRESS?.toLowerCase())
+        throw new AppError("Payout address is not allowed", 400, "bad_address");
+};
 
 const intentBody = z.object({
     vaultId: uuid,
@@ -187,11 +195,13 @@ export async function userRoutes(app: FastifyInstance) {
 
     app.post("/me/withdrawals/preview", write, async (req) => {
         const b = withdrawalBody.parse(req.body);
+        notFactory(b.destinationAddress);
         return previewWithdrawal(db, { userId: req.user!.id, ...b });
     });
 
     app.post("/me/withdrawals", write, async (req, reply) => {
         const b = withdrawalBody.parse(req.body);
+        notFactory(b.destinationAddress);
         const r = await idempotent(req, req.user!.id, 201, () =>
             requestWithdrawal(db, { userId: req.user!.id, ...b }),
         );

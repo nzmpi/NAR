@@ -217,63 +217,6 @@ export async function cancelIntent(
         );
 }
 
-/* --------------------------- transfers --------------------------- */
-export interface RecordTransferInput {
-    vaultId: string;
-    assetId: string;
-    txHash: string;
-    logIndex: number;
-    amount: bigint; // token units
-    fromAddress?: string;
-    blockNumber?: bigint;
-    blockTimestamp?: Date;
-}
-
-// NOTE: no onchain verification yet (RPC pending). Admin/scanner supplies it.
-// Never credits anything: transfers stay unmatched/pending until a sweep.
-export function recordTransfer(database: Database, i: RecordTransferInput) {
-    return database.transaction(async (tx) => {
-        if (!TX_HASH.test(i.txHash))
-            throw new AppError("Invalid transaction hash", 400, "bad_tx");
-        if (!Number.isInteger(i.logIndex) || i.logIndex < 0)
-            throw new AppError("Invalid log index", 400, "bad_log");
-        if (i.amount <= 0n)
-            throw new AppError("Amount must be positive", 400, "bad_amount");
-        const [vault] = await tx
-            .select()
-            .from(vaults)
-            .where(eq(vaults.id, i.vaultId))
-            .limit(1);
-        const [asset] = await tx
-            .select()
-            .from(assets)
-            .where(and(eq(assets.id, i.assetId), eq(assets.isActive, true)))
-            .limit(1);
-        if (!vault || !asset || vault.chainId !== asset.chainId)
-            throw new AppError(
-                "Asset is not supported on this vault's chain",
-                400,
-                "bad_asset",
-            );
-
-        const [t] = await tx
-            .insert(depositTransfers)
-            .values({
-                chainId: vault.chainId,
-                txHash: i.txHash.toLowerCase(),
-                logIndex: i.logIndex,
-                vaultId: i.vaultId,
-                assetId: i.assetId,
-                fromAddress: i.fromAddress ?? null,
-                amount: i.amount.toString(),
-                blockNumber: i.blockNumber?.toString() ?? null,
-                blockTimestamp: i.blockTimestamp ?? null,
-            })
-            .returning();
-        return t;
-    });
-}
-
 async function attach(tx: Tx, transferId: string, intentId: string, now: Date) {
     const [t] = await tx
         .select()
@@ -339,12 +282,12 @@ export function autoMatchTransfer(
                 and(
                     eq(depositIntents.vaultId, t.vaultId),
                     eq(depositIntents.assetId, t.assetId),
-                    inArray(depositIntents.status, OPEN_FOR_MATCH),
+                    // Only fresh requests: a request that already has a transfer
+                    // must not take a stranger's small transfer automatically.
+                    eq(depositIntents.status, "intent"),
                 ),
             );
-        const open = cands.filter(
-            (c) => c.status !== "intent" || c.expiresAt >= now,
-        );
+        const open = cands.filter((c) => c.expiresAt >= now);
         if (open.length !== 1) return { matched: false as const };
         await attach(tx, transferId, open[0].id, now);
         return { matched: true as const, intentId: open[0].id };

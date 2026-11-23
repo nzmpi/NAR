@@ -10,7 +10,9 @@ import {
     ErrorText,
     Hint,
     Input,
+    PAGE,
     Segmented,
+    ShowMore,
     Onchain,
 } from "../components/ui";
 
@@ -18,11 +20,12 @@ const FILTERS = ["pending", "paid", "rejected", "cancelled", "all"] as const;
 
 export function Withdrawals() {
     const [filter, setFilter] = useState<(typeof FILTERS)[number]>("pending");
+    const [limit, setLimit] = useState(PAGE);
     const q = useQuery({
-        queryKey: ["admin-withdrawals", filter],
+        queryKey: ["admin-withdrawals", filter, limit],
         queryFn: () =>
             api<AdminWithdrawal[]>(
-                `/admin/withdrawals${filter === "all" ? "" : `?status=${filter}`}`,
+                `/admin/withdrawals?limit=${limit}${filter === "all" ? "" : `&status=${filter}`}`,
             ),
         refetchInterval: 30_000,
     });
@@ -54,6 +57,11 @@ export function Withdrawals() {
                     />
                 ))}
             </div>
+            <ShowMore
+                count={q.data?.length ?? 0}
+                limit={limit}
+                onMore={() => setLimit(limit + PAGE)}
+            />
         </div>
     );
 }
@@ -82,6 +90,8 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
                 body: {
                     txHash: hash.trim(),
                     reportedTotalUsd: total6!.toString(),
+                    // The exact amount shown under "Send". The server refuses if the booked amount differs.
+                    sentAmount: w.payoutAmount,
                 },
             }),
         onSuccess: done,
@@ -186,9 +196,10 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
             {mode === "pay" && (
                 <div className="space-y-3 rounded-xl border border-[var(--line)] bg-[var(--bg)] p-4">
                     <Hint>
-                        Send the funds first, then enter the transaction hash.
-                        Final amounts use the settled pool price, so the paid
-                        net can differ slightly from the quote.
+                        Send the amount under "Send", then enter the transaction
+                        hash. If the pool price moved, the server refuses the
+                        payment: reject this withdrawal and ask the member to
+                        request again.
                     </Hint>
                     <Input
                         placeholder="Payment tx hash 0x…"

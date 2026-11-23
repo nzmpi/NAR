@@ -1,15 +1,28 @@
-import { growthFactor } from "../src/accounting/rates.js";
+import { growthFactor } from "./lib/rates.js";
 import { P } from "../src/accounting/fixed.js";
 import { emptyPools, totalAssets } from "../src/accounting/pools.js";
 import {
     applyDeposit,
     applyMaturity,
-    applyWithdrawal,
     quoteWithdrawal,
+    type WithdrawalQuote,
 } from "../src/accounting/actions.js";
+import { burn, clonePools } from "../src/accounting/pools.js";
+import { type PoolKey } from "../src/accounting/pools.js";
 import { settle, type LotInput } from "../src/accounting/settle.js";
 
 const U = 1_000_000n;
+
+// Pays out a quoted withdrawal: the fee stays in the manager pool. (Test-only: production pays via markWithdrawalPaid.)
+// Execute at payment/reservation time. Fee stays in system as manager NAV.
+function applyWithdrawal(pools: Pools, poolKey: PoolKey, q: WithdrawalQuote) {
+    const p = clonePools(pools);
+    const b = burn(p[poolKey], q.sharesBurned);
+    p[poolKey] = b.state;
+    p.manager.assets += q.feeUsd; // no shares minted
+    return { pools: p, paidOutUsd: q.netUsd };
+}
+
 const YEAR = 365n * 86_400n;
 const assert = (c: boolean, m: string) => {
     if (!c) throw new Error("FAIL " + m);

@@ -12,6 +12,7 @@ import {
     withdrawals,
 } from "../../db/schema.js";
 import { requireAdmin } from "../auth.js";
+import type { Database } from "../../services/types.js";
 import { hasRpc } from "../../chain/client.js";
 import { idempotent } from "../idempotency.js";
 import { big, evmAddress, idParam, txHash, uuid } from "../schemas.js";
@@ -59,16 +60,22 @@ import {
     buildSweepBatch,
 } from "../../services/safeCalldata.js";
 
-const statusQuery = z.object({ status: z.string().max(40).optional() });
+// Lists show the newest `limit` rows; the Admin "Show more" raises it.
+const statusQuery = z.object({
+    status: z.string().max(40).optional(),
+    limit: z.coerce.number().int().min(1).max(1000).optional(),
+});
 
+// Pass the transaction the change runs in, so the change and its log commit together.
 async function audit(
+    exec: Database,
     adminId: string,
     action: string,
     entityType: string,
     entityId: string,
     details: unknown,
 ) {
-    await db.insert(auditLogs).values({
+    await exec.insert(auditLogs).values({
         adminId,
         action,
         entityType,
@@ -91,7 +98,12 @@ export async function adminRoutes(app: FastifyInstance) {
 
     /* overview */
     app.get("/admin/pools", auth, async () => adminPools(db));
-    app.get("/admin/users", auth, async () => adminListUsers(db));
+    app.get("/admin/users", auth, async (req) =>
+        adminListUsers(
+            db,
+            statusQuery.pick({ limit: true }).parse(req.query).limit,
+        ),
+    );
     app.get("/admin/performance", auth, async (req) => {
         const q = z
             .object({
@@ -127,9 +139,10 @@ export async function adminRoutes(app: FastifyInstance) {
     );
 
     /* deposits */
-    app.get("/admin/deposits", auth, async (req) =>
-        adminListDeposits(db, statusQuery.parse(req.query).status),
-    );
+    app.get("/admin/deposits", auth, async (req) => {
+        const q = statusQuery.parse(req.query);
+        return adminListDeposits(db, q.status, q.limit);
+    });
     app.get("/admin/transfers", auth, async (req) => {
         const q = z
             .object({ unmatched: z.enum(["true", "false"]).optional() })
@@ -178,23 +191,26 @@ export async function adminRoutes(app: FastifyInstance) {
                     logIndex: z.number().int().nonnegative().optional(),
                 })
                 .parse(req.body);
-            const rows = await ingestTransactionByHash(
-                db,
-                b.chainId,
-                b.txHash,
-                b.logIndex,
-            );
-            await audit(
-                req.admin!.id,
-                "transfer.ingested",
-                "chain",
-                b.chainId,
-                {
-                    txHash: b.txHash,
-                    count: rows.length,
-                },
-            );
-            return { transfers: rows };
+            return db.transaction(async (tx) => {
+                const rows = await ingestTransactionByHash(
+                    tx,
+                    b.chainId,
+                    b.txHash,
+                    b.logIndex,
+                );
+                await audit(
+                    tx,
+                    req.admin!.id,
+                    "transfer.ingested",
+                    "chain",
+                    b.chainId,
+                    {
+                        txHash: b.txHash,
+                        count: rows.length,
+                    },
+                );
+                return { transfers: rows };
+            });
         }),
     );
 
@@ -204,14 +220,17 @@ export async function adminRoutes(app: FastifyInstance) {
         once(204, async (req) => {
             const { id } = idParam.parse(req.params);
             const b = z.object({ intentId: uuid }).parse(req.body);
-            await matchTransfer(db, id, b.intentId);
-            await audit(
-                req.admin!.id,
-                "transfer.matched",
-                "deposit_transfer",
-                id,
-                b,
-            );
+            await db.transaction(async (tx) => {
+                await matchTransfer(tx, id, b.intentId);
+                await audit(
+                    tx,
+                    req.admin!.id,
+                    "transfer.matched",
+                    "deposit_transfer",
+                    id,
+                    b,
+                );
+            });
             return null;
         }),
     );
@@ -300,14 +319,16 @@ export async function adminRoutes(app: FastifyInstance) {
     );
 
     /* withdrawals */
-    app.get("/admin/withdrawals", auth, async (req) =>
-        adminListWithdrawals(db, statusQuery.parse(req.query).status),
-    );
+    app.get("/admin/withdrawals", auth, async (req) => {
+        const q = statusQuery.parse(req.query);
+        return adminListWithdrawals(db, q.status, q.limit);
+    });
 
     // Read only: relocks apply on their own at the next settlement.
-    app.get("/admin/relocks", auth, async (req) =>
-        adminListRelocks(db, statusQuery.parse(req.query).status),
-    );
+    app.get("/admin/relocks", auth, async (req) => {
+        const q = statusQuery.parse(req.query);
+        return adminListRelocks(db, q.status, q.limit);
+    });
 
     app.post(
         "/admin/withdrawals/:id/lock",
@@ -355,7 +376,11 @@ export async function adminRoutes(app: FastifyInstance) {
         once(200, async (req) => {
             const { id } = idParam.parse(req.params);
             const b = z
-                .object({ txHash, reportedTotalUsd: big })
+                .object({
+                    txHash,
+                    reportedTotalUsd: big,
+                    sentAmount: big, // token units actually sent
+                })
                 .parse(req.body);
             const [w] = await db
                 .select({ userId: withdrawals.userId })
@@ -366,6 +391,7 @@ export async function adminRoutes(app: FastifyInstance) {
                 adminId: req.admin!.id,
                 txHash: b.txHash,
                 reportedTotalUsd: b.reportedTotalUsd,
+                sentAmount: b.sentAmount,
             });
             if (w)
                 void notifyUser(
@@ -388,9 +414,18 @@ export async function adminRoutes(app: FastifyInstance) {
                     chainId: z.number().int().positive(),
                 })
                 .parse(req.body);
-            const [c] = await db.insert(chains).values(b).returning();
-            await audit(req.admin!.id, "chain.created", "chain", c.id, b);
-            return c;
+            return db.transaction(async (tx) => {
+                const [c] = await tx.insert(chains).values(b).returning();
+                await audit(
+                    tx,
+                    req.admin!.id,
+                    "chain.created",
+                    "chain",
+                    c.id,
+                    b,
+                );
+                return c;
+            });
         }),
     );
 
@@ -407,12 +442,24 @@ export async function adminRoutes(app: FastifyInstance) {
                     decimals: z.number().int().min(0).max(36),
                 })
                 .parse(req.body);
-            const [a] = await db
-                .insert(assets)
-                .values({ ...b, tokenAddress: b.tokenAddress.toLowerCase() })
-                .returning();
-            await audit(req.admin!.id, "asset.created", "asset", a.id, b);
-            return a;
+            return db.transaction(async (tx) => {
+                const [a] = await tx
+                    .insert(assets)
+                    .values({
+                        ...b,
+                        tokenAddress: b.tokenAddress.toLowerCase(),
+                    })
+                    .returning();
+                await audit(
+                    tx,
+                    req.admin!.id,
+                    "asset.created",
+                    "asset",
+                    a.id,
+                    b,
+                );
+                return a;
+            });
         }),
     );
 
@@ -422,14 +469,23 @@ export async function adminRoutes(app: FastifyInstance) {
         once(204, async (req) => {
             const { id } = idParam.parse(req.params);
             const b = z.object({ isActive: z.boolean() }).parse(req.body);
-            const r = await db
-                .update(assets)
-                .set({ isActive: b.isActive })
-                .where(eq(assets.id, id))
-                .returning({ id: assets.id });
-            if (!r.length)
-                throw new AppError("Asset not found", 404, "not_found");
-            await audit(req.admin!.id, "asset.active_changed", "asset", id, b);
+            await db.transaction(async (tx) => {
+                const r = await tx
+                    .update(assets)
+                    .set({ isActive: b.isActive })
+                    .where(eq(assets.id, id))
+                    .returning({ id: assets.id });
+                if (!r.length)
+                    throw new AppError("Asset not found", 404, "not_found");
+                await audit(
+                    tx,
+                    req.admin!.id,
+                    "asset.active_changed",
+                    "asset",
+                    id,
+                    b,
+                );
+            });
             return null;
         }),
     );
@@ -521,20 +577,23 @@ export async function adminRoutes(app: FastifyInstance) {
         once(204, async (req) => {
             const { id } = idParam.parse(req.params);
             const b = z.object({ isBlocked: z.boolean() }).parse(req.body);
-            const r = await db
-                .update(users)
-                .set({ isBlocked: b.isBlocked, updatedAt: new Date() })
-                .where(eq(users.id, id))
-                .returning({ id: users.id });
-            if (!r.length)
-                throw new AppError("User not found", 404, "not_found");
-            await audit(
-                req.admin!.id,
-                b.isBlocked ? "user.blocked" : "user.unblocked",
-                "user",
-                id,
-                b,
-            );
+            await db.transaction(async (tx) => {
+                const r = await tx
+                    .update(users)
+                    .set({ isBlocked: b.isBlocked, updatedAt: new Date() })
+                    .where(eq(users.id, id))
+                    .returning({ id: users.id });
+                if (!r.length)
+                    throw new AppError("User not found", 404, "not_found");
+                await audit(
+                    tx,
+                    req.admin!.id,
+                    b.isBlocked ? "user.blocked" : "user.unblocked",
+                    "user",
+                    id,
+                    b,
+                );
+            });
             return null;
         }),
     );
@@ -555,19 +614,22 @@ export async function adminRoutes(app: FastifyInstance) {
                     note: z.string().trim().max(100).optional(),
                 })
                 .parse(req.body);
-            const r = await db
-                .insert(userAllowlist)
-                .values({ ...b, addedBy: req.admin!.id })
-                .onConflictDoNothing()
-                .returning();
-            if (r.length)
-                await audit(
-                    req.admin!.id,
-                    "allowlist.added",
-                    "user_allowlist",
-                    b.telegramId,
-                    b,
-                );
+            await db.transaction(async (tx) => {
+                const r = await tx
+                    .insert(userAllowlist)
+                    .values({ ...b, addedBy: req.admin!.id })
+                    .onConflictDoNothing()
+                    .returning();
+                if (r.length)
+                    await audit(
+                        tx,
+                        req.admin!.id,
+                        "allowlist.added",
+                        "user_allowlist",
+                        b.telegramId,
+                        b,
+                    );
+            });
             return null;
         }),
     );
@@ -579,18 +641,21 @@ export async function adminRoutes(app: FastifyInstance) {
             const { telegramId } = z
                 .object({ telegramId: tgId })
                 .parse(req.params);
-            const r = await db
-                .delete(userAllowlist)
-                .where(eq(userAllowlist.telegramId, telegramId))
-                .returning({ id: userAllowlist.telegramId });
-            if (r.length)
-                await audit(
-                    req.admin!.id,
-                    "allowlist.removed",
-                    "user_allowlist",
-                    telegramId,
-                    {},
-                );
+            await db.transaction(async (tx) => {
+                const r = await tx
+                    .delete(userAllowlist)
+                    .where(eq(userAllowlist.telegramId, telegramId))
+                    .returning({ id: userAllowlist.telegramId });
+                if (r.length)
+                    await audit(
+                        tx,
+                        req.admin!.id,
+                        "allowlist.removed",
+                        "user_allowlist",
+                        telegramId,
+                        {},
+                    );
+            });
             return null;
         }),
     );

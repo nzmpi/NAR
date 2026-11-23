@@ -76,7 +76,7 @@ export async function verifyIdToken(
     } catch {
         throw new AppError("Telegram login failed", 401, "login_failed");
     }
-    if (payload.nonce !== undefined && payload.nonce !== expectedNonce)
+    if (payload.nonce !== expectedNonce)
         throw new AppError("Telegram login failed", 401, "login_failed");
     const id = (payload as Record<string, unknown>).id;
     if (typeof id !== "number" && typeof id !== "string")

@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
     assets,
     chainScanState,
@@ -145,12 +145,30 @@ async function doScan(database: Database, chain: ChainRow) {
 
     // Logs are only fetched for vaults holding a balance at `head`. Deposits
     // are only swept after they are recorded, so an empty vault has nothing new.
-    const vs = await fundedVaults(
+    // Vaults with an open deposit are always scanned, even when a sweep has
+    // emptied them: a deposit swept before the scan would otherwise be missed.
+    const openVaults = await database
+        .selectDistinct({ address: vaults.address })
+        .from(depositIntents)
+        .innerJoin(vaults, eq(vaults.id, depositIntents.vaultId))
+        .where(
+            and(
+                eq(depositIntents.chainId, chain.id),
+                inArray(depositIntents.status, ["intent", "transfer_detected"]),
+            ),
+        );
+    const funded = await fundedVaults(
         chain.chainId,
         all.map((v) => v.address),
         toks.map((t) => t.tokenAddress),
         head,
     );
+    const vs = [
+        ...new Set([
+            ...funded,
+            ...openVaults.map((v) => v.address.toLowerCase()),
+        ]),
+    ];
 
     let found = 0;
     if (vs.length && toks.length) {
@@ -482,5 +500,20 @@ export async function verifySweepTx(
             400,
             "not_a_sweep",
         );
+    // Funds must go to a treasury address (same list the sweep calldata uses).
+    if (config.TREASURY_LIST.length || config.APP_ENV === "prod") {
+        const outside = tx.transfers.some(
+            (t) =>
+                t.token.toLowerCase() === r.intent.tokenAddress.toLowerCase() &&
+                t.from.toLowerCase() === r.vaultAddress.toLowerCase() &&
+                !config.TREASURY_LIST.includes(t.to.toLowerCase()),
+        );
+        if (outside)
+            throw new AppError(
+                "The sweep sent funds to an address that is not a treasury address",
+                400,
+                "not_treasury",
+            );
+    }
     return swept;
 }

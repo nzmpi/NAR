@@ -1,5 +1,5 @@
 // config.ts validates env on import, and CI has no .env: set a fixed test env
-// first, then load the modules. dotenv never overrides values set here.
+// first, then load the modules.
 Object.assign(process.env, {
     APP_ENV: "test",
     // Nothing listens on port 1: a request that passes the binding check

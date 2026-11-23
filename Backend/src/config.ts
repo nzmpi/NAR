@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { z } from "zod";
 
 const opt = <T extends z.ZodType>(t: T) =>
@@ -79,6 +78,9 @@ if (
     throw new Error(
         "APP_ENV=prod requires FACTORY_ADDRESS (the proxy), VAULT_ARTIFACT_PATH and VAULT_CREATION_CODE_HASH",
     );
+// Behind Caddy the visitor IP is only right with TRUST_PROXY_HOPS=1; at 0 every user shares one rate limit.
+if (env.APP_ENV === "prod" && env.TRUST_PROXY_HOPS === 0)
+    throw new Error("APP_ENV=prod requires TRUST_PROXY_HOPS (1 behind Caddy)");
 if (env.APP_ENV === "prod" && !env.ADMIN_PROXY_SECRET)
     throw new Error("APP_ENV=prod requires ADMIN_PROXY_SECRET");
 const adminOrigin = new URL(env.ADMIN_ORIGIN).origin;
