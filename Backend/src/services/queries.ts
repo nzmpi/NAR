@@ -319,6 +319,56 @@ export function adminListWithdrawals(database: Database, status?: string) {
         .limit(LIMIT);
 }
 
+// Relock requests with their user and items. Each item names its source
+// tier and the current value of its reserved shares (what a "max" moves).
+export async function adminListRelocks(database: Database, status?: string) {
+    const rs = await database
+        .select({
+            request: relockRequests,
+            telegramId: users.telegramId,
+            username: users.username,
+        })
+        .from(relockRequests)
+        .innerJoin(users, eq(users.id, relockRequests.userId))
+        .where(status ? eq(relockRequests.status, status) : undefined)
+        .orderBy(desc(relockRequests.createdAt))
+        .limit(LIMIT);
+    if (!rs.length) return [];
+    const items = await database
+        .select({ item: relockItems, sourcePoolId: positionLots.poolId })
+        .from(relockItems)
+        .innerJoin(positionLots, eq(positionLots.id, relockItems.sourceLotId))
+        .where(
+            inArray(
+                relockItems.requestId,
+                rs.map((r) => r.request.id),
+            ),
+        );
+    const { state, keyById } = await readPools(database);
+    return rs.map((r) => ({
+        ...r,
+        items: items
+            .filter((i) => i.item.requestId === r.request.id)
+            .map(({ item, sourcePoolId }) => {
+                const source = keyById.get(sourcePoolId);
+                return {
+                    ...item,
+                    sourcePool: source,
+                    targetPool: keyById.get(item.targetPoolId),
+                    // Shares go back to the lot once an item leaves "pending",
+                    // but the item keeps the number, so only pending ones count.
+                    reservedUsd:
+                        source && item.status === "pending"
+                            ? valueOfShares(
+                                  state[source],
+                                  BigInt(item.reservedShares),
+                              )
+                            : null,
+                };
+            }),
+    }));
+}
+
 // Users with their current balance (same valuation as getPortfolio) and
 // vault count, so the admin list can filter without a call per user.
 // A vault is one address (nonce) deployed per chain, so count distinct

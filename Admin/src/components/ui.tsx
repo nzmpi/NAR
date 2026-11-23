@@ -143,7 +143,9 @@ const STATUS_TONE: Record<string, Tone> = {
     paid: "good",
     active: "good",
     deployed: "good",
+    applied: "good",
     rejected: "bad",
+    failed: "bad",
     blocked: "bad",
 };
 export const Pill = ({

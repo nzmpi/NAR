@@ -2,7 +2,11 @@ import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { bpsPct, fmtUsd, pct } from "../lib/money";
-import type { AdminPerformance, AdminPools } from "../lib/types";
+import {
+    POOL_NAME,
+    type AdminPerformance,
+    type AdminPools,
+} from "../lib/types";
 import type { Tab, useCounts } from "../App";
 import {
     ErrorText,
@@ -22,13 +26,6 @@ const RANGES = [
     { id: "all", label: "All" },
 ] as const;
 type Range = (typeof RANGES)[number]["id"];
-const POOL_NAME: Record<string, string> = {
-    liquid: "Liquid",
-    lock_1m: "Lock 1M",
-    lock_2m: "Lock 2M",
-    lock_3m: "Lock 3M",
-    manager: "Manager",
-};
 
 const Stat = ({
     label,

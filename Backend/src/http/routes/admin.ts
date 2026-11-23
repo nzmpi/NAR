@@ -40,6 +40,7 @@ import {
     adminListSettlements,
     adminListTransfers,
     adminListUsers,
+    adminListRelocks,
     adminListWithdrawals,
     adminPools,
     getPortfolio,
@@ -301,6 +302,11 @@ export async function adminRoutes(app: FastifyInstance) {
     /* withdrawals */
     app.get("/admin/withdrawals", auth, async (req) =>
         adminListWithdrawals(db, statusQuery.parse(req.query).status),
+    );
+
+    // Read only: relocks apply on their own at the next settlement.
+    app.get("/admin/relocks", auth, async (req) =>
+        adminListRelocks(db, statusQuery.parse(req.query).status),
     );
 
     app.post(

@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { settleManual } from "../src/services/settlement.js";
 import { cancelRelock, requestRelock } from "../src/services/relocks.js";
+import { adminListRelocks } from "../src/services/queries.js";
 import { U, day, ok, rejects, setup } from "./lib/harness.js";
 
 const h = await setup();
@@ -105,6 +106,24 @@ await rejects(
     "reserved shares cannot be relocked twice",
 );
 
+// Admin list: the queued request with its user, tiers and reserved value.
+const pendingList = await adminListRelocks(db, "pending");
+ok(
+    pendingList.length === 1 &&
+        pendingList[0].request.id === r1.requestId &&
+        pendingList[0].telegramId === alice.telegramId,
+    "admin sees the pending relock and its user",
+);
+const listed = pendingList[0].items[0];
+ok(
+    listed.sourcePool === "liquid" &&
+        listed.targetPool === "lock_2m" &&
+        listed.reservedUsd !== null &&
+        listed.reservedUsd >= 399n * U &&
+        listed.reservedUsd <= 400n * U,
+    "admin item shows liquid -> lock_2m and about $400 reserved",
+);
+
 const before = await h.totalNav();
 await settleManual(db, {
     adminId: admin.id,
@@ -115,6 +134,15 @@ await settleManual(db, {
 ok(
     (await itemStatus(r1.requestId)).every((x) => x === "applied"),
     "relock applied at settlement",
+);
+ok(
+    (await adminListRelocks(db, "pending")).length === 0 &&
+        (await adminListRelocks(db, "applied")).length === 1,
+    "admin filter moves it from pending to applied",
+);
+ok(
+    (await adminListRelocks(db, "applied"))[0].items[0].reservedUsd === null,
+    "admin shows no reserved amount once the relock is applied",
 );
 const lots = await h.openLots(alice.id);
 const lock2 = lots.find((l) => l.key === "lock_2m");
@@ -196,6 +224,15 @@ ok(
         0n,
     "cancel releases reservation",
 );
+{
+    const [cancelled] = await adminListRelocks(db, "cancelled");
+    ok(
+        cancelled.request.id === r2.requestId &&
+            cancelled.items[0].isMax &&
+            cancelled.items[0].reservedUsd === null,
+        "admin shows no reserved amount for a cancelled max relock",
+    );
+}
 await rejects(
     cancelRelock(db, { requestId: r2.requestId, userId: alice.id }),
     "cannot cancel twice",
