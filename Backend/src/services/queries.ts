@@ -355,12 +355,15 @@ export async function adminListRelocks(database: Database, status?: string) {
                     ...item,
                     sourcePool: source,
                     targetPool: keyById.get(item.targetPoolId),
-                    reservedUsd: source
-                        ? valueOfShares(
-                              state[source],
-                              BigInt(item.reservedShares),
-                          )
-                        : null,
+                    // Shares go back to the lot once an item leaves "pending",
+                    // but the item keeps the number, so only pending ones count.
+                    reservedUsd:
+                        source && item.status === "pending"
+                            ? valueOfShares(
+                                  state[source],
+                                  BigInt(item.reservedShares),
+                              )
+                            : null,
                 };
             }),
     }));

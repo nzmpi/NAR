@@ -140,6 +140,10 @@ ok(
         (await adminListRelocks(db, "applied")).length === 1,
     "admin filter moves it from pending to applied",
 );
+ok(
+    (await adminListRelocks(db, "applied"))[0].items[0].reservedUsd === null,
+    "admin shows no reserved amount once the relock is applied",
+);
 const lots = await h.openLots(alice.id);
 const lock2 = lots.find((l) => l.key === "lock_2m");
 ok(!!lock2, "new lock_2m lot created");
@@ -199,6 +203,15 @@ ok(
         0n,
     "cancel releases reservation",
 );
+{
+    const [cancelled] = await adminListRelocks(db, "cancelled");
+    ok(
+        cancelled.request.id === r2.requestId &&
+            cancelled.items[0].isMax &&
+            cancelled.items[0].reservedUsd === null,
+        "admin shows no reserved amount for a cancelled max relock",
+    );
+}
 await rejects(
     cancelRelock(db, { requestId: r2.requestId, userId: alice.id }),
     "cannot cancel twice",
