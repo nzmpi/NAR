@@ -35,6 +35,7 @@ Sessions last 3 days without use and 10 days at most. A new IP (other Wi-Fi, VPN
    ```bash
    docker compose up -d
    ```
+4. Seed the manager pool: as the owner admin, deposit 1 USD into the manager pool from the Mini App (an all-manager deposit needs only 1 USD). Without manager shares, settlement excess and withdrawal fees have nowhere to go and fail.
 
 ## Deploy a new version
 

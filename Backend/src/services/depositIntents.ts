@@ -8,6 +8,7 @@ import {
     depositIntents,
     depositTransfers,
     deposits,
+    pools,
     positionLots,
     users,
     vaults,
@@ -24,6 +25,8 @@ import type { Database, Tx } from "./types.js";
 import { recordFlow } from "./history.js";
 
 export const MIN_DEPOSIT_USD = 50n * USD_MICRO;
+// A deposit that goes only to the manager pool (admin bootstrap) needs 1 USD.
+export const MIN_MANAGER_DEPOSIT_USD = 1n * USD_MICRO;
 export const INTENT_TTL_MS = 24 * 60 * 60 * 1000;
 const STABLES = ["USDT", "USDC", "DAI"];
 const LOCK_MONTHS: Record<PoolKey, number> = {
@@ -107,9 +110,16 @@ export function createIntent(database: Database, i: CreateIntentInput) {
 
         if (i.intendedAmount <= 0n)
             throw new AppError("Amount must be positive", 400, "bad_amount");
-        if (tokenToUsd(i.intendedAmount, asset.decimals) < MIN_DEPOSIT_USD)
+        // Non-admins sending to manager are rejected below with 403.
+        const managerOnly =
+            i.allocations.length === 1 &&
+            i.allocations[0].poolKey === "manager";
+        if (
+            tokenToUsd(i.intendedAmount, asset.decimals) <
+            (managerOnly ? MIN_MANAGER_DEPOSIT_USD : MIN_DEPOSIT_USD)
+        )
             throw new AppError(
-                "Minimum deposit is 50 USD",
+                `Minimum deposit is ${managerOnly ? 1 : 50} USD`,
                 400,
                 "below_minimum",
             );
@@ -429,9 +439,19 @@ export function recordSweep(
                 );
         }
         const confirmedUsd = tokenToUsd(confirmed, asset.decimals);
-        if (confirmedUsd < MIN_DEPOSIT_USD)
+        const intentPools = await tx
+            .select({ isManager: pools.isManager })
+            .from(depositIntentAllocations)
+            .innerJoin(pools, eq(pools.id, depositIntentAllocations.poolId))
+            .where(eq(depositIntentAllocations.intentId, intent.id));
+        const managerOnly =
+            intentPools.length === 1 && intentPools[0].isManager;
+        if (
+            confirmedUsd <
+            (managerOnly ? MIN_MANAGER_DEPOSIT_USD : MIN_DEPOSIT_USD)
+        )
             throw new AppError(
-                "Confirmed amount is below the 50 USD minimum",
+                `Confirmed amount is below the ${managerOnly ? 1 : 50} USD minimum`,
                 400,
                 "below_minimum",
             );
