@@ -24,24 +24,40 @@ export const accessEnv = {
 declare module "fastify" {
     interface FastifyRequest {
         user?: { id: string; telegramId: string; username: string | null };
+        // Verified Telegram identity, set before any access check.
+        tg?: {
+            telegramId: string;
+            username: string | null;
+            firstName: string | null;
+        };
         admin?: { id: string; telegramId: string };
     }
 }
 
 export { ADMIN_COOKIE } from "../auth/adminSession.js";
 
-// Mini App user: `Authorization: tma <initData>`. No separate login.
-export async function requireUser(req: FastifyRequest) {
+// Mini App identity only: `Authorization: tma <initData>`. Used by the
+// access-request routes, which people without access must reach.
+export async function requireTelegram(req: FastifyRequest) {
     const header = req.headers.authorization;
     if (!header?.startsWith("tma "))
         throw new AppError("Unauthorized", 401, "unauthorized");
-
     const { user: tg } = validateInitData(
         header.slice(4),
         config.BOT_TOKEN,
         config.INIT_DATA_MAX_AGE_SECONDS,
     );
-    const telegramId = String(tg.id);
+    req.tg = {
+        telegramId: String(tg.id),
+        username: tg.username ?? null,
+        firstName: tg.first_name ?? null,
+    };
+}
+
+// Mini App user with access: `Authorization: tma <initData>`. No separate login.
+export async function requireUser(req: FastifyRequest) {
+    await requireTelegram(req);
+    const { telegramId } = req.tg!;
 
     // Test environment: owner only. Prod: new sign-ups need the allowlist.
     if (!(await hasAccess(db, accessEnv, telegramId)))
@@ -53,7 +69,7 @@ export async function requireUser(req: FastifyRequest) {
               )
             : new AppError("Not invited", 403, "not_allowlisted");
 
-    const username = tg.username ?? null;
+    const username = req.tg!.username;
     await db
         .insert(users)
         .values({ telegramId, username })

@@ -12,6 +12,10 @@ import {
     withdrawals,
 } from "../../db/schema.js";
 import { requireAdmin } from "../auth.js";
+import {
+    decideAccessRequest,
+    listAccessRequests,
+} from "../../services/accessRequests.js";
 import type { Database } from "../../services/types.js";
 import { hasRpc } from "../../chain/client.js";
 import { idempotent } from "../idempotency.js";
@@ -657,6 +661,31 @@ export async function adminRoutes(app: FastifyInstance) {
             return null;
         }),
     );
+
+    /* access requests from people not on the allowlist */
+    app.get("/admin/access-requests", auth, async (req) => {
+        const q = statusQuery.parse(req.query);
+        return listAccessRequests(db, q.status, q.limit);
+    });
+    for (const [action, approve] of [
+        ["approve", true],
+        ["reject", false],
+    ] as const)
+        app.post(
+            `/admin/access-requests/:telegramId/${action}`,
+            auth,
+            once(204, async (req) => {
+                const { telegramId } = z
+                    .object({ telegramId: tgId })
+                    .parse(req.params);
+                await decideAccessRequest(db, {
+                    telegramId,
+                    adminId: req.admin!.id,
+                    approve,
+                });
+                return null;
+            }),
+        );
 
     app.get("/admin/chains", auth, async () =>
         db

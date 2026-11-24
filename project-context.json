@@ -206,7 +206,6 @@
       "not_verified": "The onchain sweep check in verifySweepTx has not been exercised against a real RPC; test once on a testnet sweep.",
       "open_low_findings": [
         "Withdrawal payouts are not verified onchain, and one payout tx hash can mark several withdrawals paid.",
-        "In prod any Telegram user can sign up; consider a Telegram-ID allowlist for the family-and-friends launch.",
         "Admin state-changing actions have no idempotency keys (double-click on settle records two settlements).",
         "Logout clears the cookie but the 8-hour session JWT stays valid until expiry; deactivating the admin does revoke access."
       ]

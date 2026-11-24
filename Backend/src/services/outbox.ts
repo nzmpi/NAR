@@ -21,6 +21,18 @@ export async function enqueueNotification(
         .values({ userId, text: text.slice(0, 4000) });
 }
 
+// For people without an account (access request decisions): private chat
+// id == Telegram user id.
+export async function enqueueChatNotification(
+    database: Database,
+    chatId: string,
+    text: string,
+) {
+    await database
+        .insert(notificationOutbox)
+        .values({ chatId, text: text.slice(0, 4000) });
+}
+
 // 30s, 1m, 2m, 4m ... capped at 1h.
 function backoffMs(attempts: number) {
     return Math.min(30_000 * 2 ** (attempts - 1), 3_600_000);
@@ -78,7 +90,7 @@ export async function drainOutbox(log: Log): Promise<number> {
         const due = await tx
             .select({ n: notificationOutbox, tg: users.telegramId })
             .from(notificationOutbox)
-            .innerJoin(users, eq(users.id, notificationOutbox.userId))
+            .leftJoin(users, eq(users.id, notificationOutbox.userId))
             .where(
                 and(
                     eq(notificationOutbox.status, "pending"),
@@ -97,7 +109,7 @@ export async function drainOutbox(log: Log): Promise<number> {
     });
 
     for (const { n, tg } of rows) {
-        const r = await sendTelegram(tg, n.text);
+        const r = await sendTelegram((n.chatId ?? tg)!, n.text);
         if (r.ok) {
             await db
                 .update(notificationOutbox)

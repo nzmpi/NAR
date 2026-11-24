@@ -60,6 +60,30 @@ export const userAllowlist = pgTable("user_allowlist", {
     createdAt: createdAt(),
 });
 
+// Sign-up requests from users who are not on the allowlist yet. One row per
+// Telegram ID; approving adds the ID to user_allowlist.
+export const accessRequests = pgTable(
+    "access_requests",
+    {
+        telegramId: text("telegram_id").primaryKey(),
+        username: text("username"),
+        firstName: text("first_name"),
+        status: text("status").notNull().default("pending"), // pending | approved | rejected
+        requestedAt: timestamp("requested_at", { withTimezone: true })
+            .notNull()
+            .defaultNow(),
+        decidedAt: timestamp("decided_at", { withTimezone: true }),
+        decidedBy: uuid("decided_by").references(() => admins.id),
+    },
+    (t) => [
+        index("access_requests_status_idx").on(t.status, t.requestedAt),
+        check(
+            "access_requests_status_chk",
+            sql`${t.status} in ('pending','approved','rejected')`,
+        ),
+    ],
+);
+
 /* ------------------------------------------------------------------ */
 /* Chains, assets, vaults                                              */
 /* ------------------------------------------------------------------ */
@@ -675,9 +699,10 @@ export const notificationOutbox = pgTable(
     "notification_outbox",
     {
         id: uuid("id").primaryKey().defaultRandom(),
-        userId: uuid("user_id")
-            .notNull()
-            .references(() => users.id),
+        // A user, or a bare Telegram chat for people without an account yet
+        // (access request decisions).
+        userId: uuid("user_id").references(() => users.id),
+        chatId: text("chat_id"),
         text: text("text").notNull(),
         status: text("status").notNull().default("pending"), // pending | sent | failed
         attempts: integer("attempts").notNull().default(0),
@@ -692,6 +717,10 @@ export const notificationOutbox = pgTable(
     },
     (t) => [
         index("notification_outbox_due_idx").on(t.status, t.nextAttemptAt),
+        check(
+            "notification_outbox_recipient_chk",
+            sql`${t.userId} IS NOT NULL OR ${t.chatId} IS NOT NULL`,
+        ),
         check(
             "notification_outbox_status_chk",
             sql`${t.status} in ('pending','sent','failed')`,

@@ -14,7 +14,7 @@ setInterval(() => {
 
 export function userLimit(bucket: string, maxPerMinute: number) {
     return async (req: FastifyRequest) => {
-        const id = req.user?.id ?? req.ip;
+        const id = req.user?.id ?? req.tg?.telegramId ?? req.ip;
         const key = `${bucket}:${id}`;
         const now = Date.now();
         let h = hits.get(key);
