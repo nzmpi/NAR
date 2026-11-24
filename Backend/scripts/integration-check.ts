@@ -413,6 +413,26 @@ ok(true, "<10% NAV move needs no confirmation");
         "cap year advances by whole lot-years",
     );
     ok(l2.capUsedUsd === "0", "cap use reset at the anniversary");
+
+    // A loss lowers cap use by the lot's loss (net earnings for the year), so
+    // the lot earns in full again until it is back at base + cap.
+    const value = async () =>
+        (await getPortfolio(db, bob.id)).lots.find((x) => x.lotId === l2.id)!
+            .valueUsd;
+    const v0 = await value();
+    await settleManual(db, {
+        adminId: admin.id,
+        reportedTotalUsd: 12_000n * U,
+        now: day(1_101),
+    });
+    const v1 = await value();
+    const l3 = await lotNow();
+    // settle() then gives this lot cap + loss of full-rate room (capLeftUsd).
+    ok(v1 < v0, "loss lowers the lot's value");
+    ok(
+        BigInt(l3.capUsedUsd) === -(v0 - v1),
+        "loss lowers cap use below 0 by the lot's loss",
+    );
 }
 {
     const listed = await adminListUsers(db);
