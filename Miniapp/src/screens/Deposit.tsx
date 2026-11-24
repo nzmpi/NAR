@@ -438,6 +438,16 @@ function IntentCard({
         const t = setTimeout(() => setCopied(false), 2000);
         return () => clearTimeout(t);
     }, [copied]);
+    // Result and error lines fade out 5 s after each action; a counter so a repeat result restarts the timer.
+    const [flash, setFlash] = useState(0);
+    const [hideNote, setHideNote] = useState(false);
+    useEffect(() => {
+        if (!flash) return;
+        setHideNote(false);
+        const t = setTimeout(() => setHideNote(true), 5000);
+        return () => clearTimeout(t);
+    }, [flash]);
+    const onSettled = () => setFlash((n) => n + 1);
     const asset = assets.find((a) => a.assetId === i.assetId);
     const vault = vaults.find((v) => v.id === i.vaultId);
     const refresh = () => {
@@ -459,6 +469,7 @@ function IntentCard({
             );
             refresh();
         },
+        onSettled,
     });
     const attach = useMutation({
         mutationFn: () =>
@@ -471,6 +482,7 @@ function IntentCard({
             setMsg("Transaction submitted.");
             refresh();
         },
+        onSettled,
     });
     const approve = useMutation({
         mutationFn: () =>
@@ -478,11 +490,13 @@ function IntentCard({
                 method: "POST",
             }),
         onSuccess: refresh,
+        onSettled,
     });
     const cancel = useMutation({
         mutationFn: () =>
             api(`/me/deposits/intents/${i.id}/cancel`, { method: "POST" }),
         onSuccess: refresh,
+        onSettled,
     });
 
     const dec = asset?.decimals ?? 6;
@@ -642,15 +656,21 @@ function IntentCard({
                     </p>
                 )}
 
-                {msg && <p className="text-sm text-[var(--hint)]">{msg}</p>}
-                <ErrorText
-                    error={
-                        check.error ||
-                        attach.error ||
-                        approve.error ||
-                        cancel.error
-                    }
-                />
+                {!hideNote && (
+                    <>
+                        {msg && (
+                            <p className="text-sm text-[var(--hint)]">{msg}</p>
+                        )}
+                        <ErrorText
+                            error={
+                                check.error ||
+                                attach.error ||
+                                approve.error ||
+                                cancel.error
+                            }
+                        />
+                    </>
+                )}
             </Card>
         </div>
     );
