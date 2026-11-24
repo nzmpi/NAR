@@ -82,6 +82,10 @@ export function Overview({
             : RANGES.find((r) => r.id === range)!.label;
     const loss = perf.data ? BigInt(perf.data.lossUsd) : 0n;
     const todo = [
+        counts.access > 0 && {
+            text: `${counts.access} access request${counts.access === 1 ? "" : "s"}`,
+            tab: "access" as const,
+        },
         counts.withdrawals > 0 && {
             text: `${counts.withdrawals} withdrawal${counts.withdrawals === 1 ? "" : "s"} pending`,
             tab: "withdrawals" as const,

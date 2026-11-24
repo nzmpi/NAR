@@ -135,6 +135,7 @@ const TONE = {
 export type Tone = keyof typeof TONE;
 const STATUS_TONE: Record<string, Tone> = {
     pending: "warn",
+    approved: "good",
     intent: "muted",
     transfer_detected: "warn",
     awaiting_user_approval: "accent",

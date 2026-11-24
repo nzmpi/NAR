@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import { ApiError } from "../lib/api";
 import type {
     ButtonHTMLAttributes,
     InputHTMLAttributes,
@@ -172,12 +174,25 @@ export const Skeleton = ({ header = true }: { header?: boolean }) => (
     </div>
 );
 
-export const ErrorText = ({ error }: { error: unknown }) =>
-    error ? (
-        <p role="alert" className="text-sm text-[var(--bad)]">
+export function ErrorText({ error }: { error: unknown }) {
+    // The demo note is a hint, not a failure: muted, and gone after 5 s.
+    const isDemo = error instanceof ApiError && error.code === "demo";
+    const [gone, setGone] = useState<unknown>(null);
+    useEffect(() => {
+        if (!isDemo) return;
+        const t = setTimeout(() => setGone(error), 5000);
+        return () => clearTimeout(t);
+    }, [error, isDemo]);
+    if (!error || gone === error) return null;
+    return (
+        <p
+            role="alert"
+            className={`text-sm ${isDemo ? "text-[var(--hint)]" : "text-[var(--bad)]"}`}
+        >
             {error instanceof Error ? error.message : "Error"}
         </p>
-    ) : null;
+    );
+}
 
 type Tone = "good" | "bad" | "warn" | "muted";
 const STATUS: Record<string, [string, Tone]> = {
@@ -193,6 +208,8 @@ const STATUS: Record<string, [string, Tone]> = {
     paid: ["Paid", "good"],
     applied: ["Applied", "good"],
     failed: ["Failed", "bad"],
+    none: ["Not requested", "muted"],
+    blocked: ["Blocked", "bad"],
 };
 const TONE: Record<Tone, string> = {
     good: "bg-[var(--good-soft)] text-[var(--good)]",

@@ -1,20 +1,29 @@
 import { useEffect, useRef, useState } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import {
+    keepPreviousData,
+    useMutation,
+    useQuery,
+    useQueryClient,
+} from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { bpsPct, fmtUsd, pct } from "../lib/money";
 import {
     POOL_APY_BPS,
     POOL_LABEL,
     USER_POOLS,
+    type AccessStatus,
     type Lot,
     type Performance,
 } from "../lib/types";
 import { usePortfolio, useRelocks, useWithdrawals } from "../lib/queries";
 import {
+    Button,
+    Card,
     ErrorText,
     Hint,
     Segmented,
     Skeleton,
+    StatusBadge,
     TIER_COLOR,
 } from "../components/ui";
 import { Sparkline } from "../components/Sparkline";
@@ -74,7 +83,13 @@ function tierCards(lots: Lot[]) {
     }).filter((t) => t.value > 0n);
 }
 
-export function Home({ go }: { go: (t: Tab) => void }) {
+export function Home({
+    go,
+    access,
+}: {
+    go: (t: Tab) => void;
+    access?: AccessStatus; // set only in the demo app
+}) {
     const [range, setRange] = useState<Range>("1m");
     const [tip, setTip] = useState(false);
     const tipRef = useRef<HTMLDivElement>(null);
@@ -172,6 +187,7 @@ export function Home({ go }: { go: (t: Tab) => void }) {
                 />
             </header>
 
+            {access && <AccessCard access={access} />}
             {pending.length > 0 && (
                 <InProgress
                     title={count(pending.length, "deposit")}
@@ -281,3 +297,52 @@ const InProgress = ({
         <span className="text-[var(--hint)]">→</span>
     </button>
 );
+
+// Demo app only: where the user's access request stands, and the one button
+// in the demo that reaches the server.
+function AccessCard({ access }: { access: AccessStatus }) {
+    const qc = useQueryClient();
+    const ask = useMutation({
+        mutationFn: () =>
+            api<AccessStatus>("/me/access-request", { method: "POST" }),
+        onSuccess: (r) => qc.setQueryData(["access"], r),
+    });
+    const canRequest = "canRequest" in access && access.canRequest;
+    const text =
+        access.status === "pending"
+            ? "Request sent. We'll message you in Telegram once it's reviewed."
+            : access.status === "blocked"
+              ? "Your account is blocked."
+              : access.status === "rejected"
+                ? canRequest
+                    ? "Your last request was declined. You can ask again."
+                    : `Your request was declined. You can ask again on ${new Date(access.retryAt).toLocaleDateString(undefined, { day: "numeric", month: "long" })}.`
+                : "NAR is invite-only. Ask for access and we'll message you in Telegram once it's reviewed.";
+    return (
+        <Card className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-2">
+                <h2 className="font-bold">Access</h2>
+                <StatusBadge status={access.status} />
+            </div>
+            <p
+                className={`text-sm ${access.status === "blocked" ? "text-[var(--bad)]" : ""}`}
+            >
+                {text}
+            </p>
+            <Hint>
+                You're looking at a demo. The numbers are examples and nothing
+                you do here is sent.
+            </Hint>
+            {canRequest && (
+                <Button disabled={ask.isPending} onClick={() => ask.mutate()}>
+                    {ask.isPending
+                        ? "Sending…"
+                        : access.status === "rejected"
+                          ? "Request again"
+                          : "Request access"}
+                </Button>
+            )}
+            <ErrorText error={ask.error} />
+        </Card>
+    );
+}

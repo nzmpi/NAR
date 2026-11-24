@@ -239,3 +239,14 @@ export interface AdminRelock {
         appliedUsd: string | null;
     }[];
 }
+
+// GET /admin/access-requests: one row per Telegram ID.
+export interface AccessRequest {
+    telegramId: string;
+    username: string | null;
+    firstName: string | null;
+    status: "pending" | "approved" | "rejected";
+    requestedAt: string;
+    decidedAt: string | null;
+    decidedBy: string | null;
+}

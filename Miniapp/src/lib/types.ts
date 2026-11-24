@@ -19,6 +19,12 @@ export const POOL_APY_BPS: Record<PoolKey, number> = {
     lock_3m: 1000,
 };
 
+// GET /me/access: anything but "approved" gets the demo app.
+export type AccessStatus =
+    | { status: "approved" | "blocked" | "pending" }
+    | { status: "none"; canRequest: true }
+    | { status: "rejected"; canRequest: boolean; retryAt: string };
+
 export interface Asset {
     assetId: string;
     symbol: string;

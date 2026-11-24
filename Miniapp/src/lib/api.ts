@@ -1,3 +1,5 @@
+import { demoAnswer } from "./demo";
+
 const BASE =
     (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ??
     "";
@@ -31,6 +33,14 @@ const FRIENDLY: Record<string, string> = {
     bad_init_data: "Open this app from Telegram.",
 };
 
+// People without access get the demo app: answers come from sample data and
+// nothing leaves the device, except the access routes.
+let demo = false;
+export const setDemo = (on: boolean) => {
+    demo = on;
+};
+export const DEMO_NOTE = "This is a demo. Request access on Home to use it.";
+
 export async function api<T>(
     path: string,
     opts: {
@@ -39,6 +49,11 @@ export async function api<T>(
         idempotencyKey?: string;
     } = {},
 ): Promise<T> {
+    if (demo && !path.startsWith("/me/access")) {
+        const r = demoAnswer(path, opts.method ?? "GET", opts.body);
+        if (r === undefined) throw new ApiError(0, "demo", DEMO_NOTE);
+        return r as T;
+    }
     const headers: Record<string, string> = {
         Authorization: `tma ${getInitData()}`,
     };

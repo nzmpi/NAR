@@ -61,7 +61,11 @@ export function Withdraw() {
                 method: "POST",
                 body: b,
             }),
-        onSuccess: setQuote,
+        // A new quote starts clean: an earlier Confirm error belongs to the old one.
+        onSuccess: (q) => {
+            submit.reset();
+            setQuote(q);
+        },
     });
     const submit = useMutation({
         mutationFn: (b: object) =>
@@ -272,6 +276,7 @@ export function Withdraw() {
                     <Button variant="danger" onClick={() => setQuote(null)}>
                         Cancel
                     </Button>
+                    <ErrorText error={submit.error} />
                 </div>
             )}
 
@@ -428,7 +433,7 @@ export function Withdraw() {
                 </Card>
             )}
 
-            <ErrorText error={preview.error || submit.error} />
+            <ErrorText error={preview.error} />
             {!quote && (
                 <Button
                     size="lg"

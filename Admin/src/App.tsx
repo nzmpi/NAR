@@ -1,8 +1,13 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, api, loginUrl } from "./lib/api";
-import type { AdminDeposit, AdminTransfer, AdminWithdrawal } from "./lib/types";
-import { ErrorBoundary, Hint } from "./components/ui";
+import type {
+    AccessRequest,
+    AdminDeposit,
+    AdminTransfer,
+    AdminWithdrawal,
+} from "./lib/types";
+import { ErrorBoundary, Hint, PAGE } from "./components/ui";
 import { Overview } from "./screens/Overview";
 import { Settlement } from "./screens/Settlement";
 import { Withdrawals } from "./screens/Withdrawals";
@@ -12,6 +17,7 @@ import { Audit } from "./screens/Audit";
 import { Deposits, NEEDS_ACTION } from "./screens/Deposits";
 import { Transfers } from "./screens/Transfers";
 import { Users } from "./screens/Users";
+import { Access } from "./screens/Access";
 import { Setup } from "./screens/Setup";
 
 const ICON = {
@@ -23,6 +29,7 @@ const ICON = {
     relocks: "M4 12a8 8 0 0114-5.3M20 12a8 8 0 01-14 5.3M18 3v4h-4M6 21v-4h4",
     settlement: "M5 12l5 5L20 7",
     settlements: "M12 8v4l3 2M3.5 12a8.5 8.5 0 1 0 2.5-6M3 4v4h4",
+    access: "M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6zM9 12l2 2 4-4",
     users: "M9 11.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c1.8.7 3 2.5 3.5 5.2",
     setup: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1",
 };
@@ -49,6 +56,7 @@ const GROUPS: { label: string; items: [Tab, string][] }[] = [
     {
         label: "People",
         items: [
+            ["access", "Access requests"],
             ["users", "Users"],
             ["setup", "Setup"],
         ],
@@ -77,7 +85,16 @@ export function useCounts() {
         queryFn: () => api<AdminTransfer[]>("/admin/transfers?unmatched=true"),
         refetchInterval: 30_000,
     });
+    const a = useQuery({
+        queryKey: ["admin-access", "pending", PAGE],
+        queryFn: () =>
+            api<AccessRequest[]>(
+                `/admin/access-requests?limit=${PAGE}&status=pending`,
+            ),
+        refetchInterval: 30_000,
+    });
     return {
+        access: a.data?.length ?? 0,
         withdrawals: w.data?.length ?? 0,
         deposits:
             d.data?.filter((x) => NEEDS_ACTION.includes(x.intent.status))
@@ -266,6 +283,7 @@ function Shell({
                         {tab === "overview" && (
                             <Overview counts={counts} go={setTab} />
                         )}
+                        {tab === "access" && <Access />}
                         {tab === "users" && <Users />}
                         {tab === "setup" && <Setup />}
                         {tab === "deposits" && <Deposits />}
