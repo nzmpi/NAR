@@ -86,6 +86,8 @@ Mark a step done by changing `[ ]` to `[x]`.
 
 - [ ] **Operator runbook** — how often to settle, how to process withdrawals, what to do on a wrong token or an incident.
 - [ ] **Risk notice** — users see that returns are projected, not guaranteed, before the first deposit.
+- [x] **Access requests (backend and bot)** — people without access can ask for approval from the bot (/start button) or the Mini App. API: `GET /me/access`, `POST /me/access-request` (Mini App auth, no access needed); `GET /admin/access-requests?status=pending`, `POST /admin/access-requests/:telegramId/approve|reject`. Approve adds the ID to the allowlist; the user gets a bot message either way; re-request after 30 days.
+- [ ] **Access requests UI** — Admin: list pending requests with Approve / Reject. Mini App: when `/me/access` is not `approved`, show the demo app with the request status and a "Request access" button.
 - [ ] **Invite test users** — add their Telegram IDs to the allowlist; send them test USDC.
 - [ ] **Collect feedback** — list bugs and UX issues from test users.
 

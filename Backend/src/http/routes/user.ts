@@ -3,7 +3,8 @@ import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import { admins } from "../../db/schema.js";
-import { requireUser } from "../auth.js";
+import { accessEnv, requireTelegram, requireUser } from "../auth.js";
+import { accessStatus, requestAccess } from "../../services/accessRequests.js";
 import { idempotent } from "../idempotency.js";
 import {
     big,
@@ -99,6 +100,17 @@ export async function userRoutes(app: FastifyInstance) {
     const auth = { preHandler: [requireUser, userLimit("read", 120)] };
     const write = { preHandler: [requireUser, userLimit("write", 20)] };
     const chain = { preHandler: [requireUser, userLimit("chain", 6)] }; // RPC-hitting
+
+    // Reachable without access: the mock Mini App shows the status and lets
+    // the user ask for approval (the bot offers the same button).
+    const tgRead = { preHandler: [requireTelegram, userLimit("read", 120)] };
+    const tgWrite = { preHandler: [requireTelegram, userLimit("access", 5)] };
+    app.get("/me/access", tgRead, async (req) =>
+        accessStatus(db, accessEnv, req.tg!.telegramId),
+    );
+    app.post("/me/access-request", tgWrite, async (req) =>
+        requestAccess(db, accessEnv, req.tg!),
+    );
 
     // isAdmin unlocks the manager pool in the deposit form; the deposit
     // service checks the same thing again.
