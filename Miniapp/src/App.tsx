@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api, getInitData } from "./lib/api";
+import { api, getInitData, setDemo } from "./lib/api";
+import type { AccessStatus } from "./lib/types";
 import { ErrorText, Hint, Skeleton } from "./components/ui";
 import { Home } from "./screens/Home";
 import { Deposit } from "./screens/Deposit";
@@ -52,10 +53,28 @@ function useDarkTheme() {
 export default function App() {
     useDarkTheme();
     const [tab, setTab] = useState<Tab>("home");
+    const access = useQuery({
+        queryKey: ["access"],
+        queryFn: () => api<AccessStatus>("/me/access"),
+        enabled: !!getInitData(),
+        retry: false,
+        // Notice an approval while the app is open.
+        refetchInterval: (q) =>
+            q.state.data?.status === "pending" ? 30_000 : false,
+    });
+    const demo = access.data ? access.data.status !== "approved" : undefined;
+    // Set before any screen mounts, so every request sees the right mode.
+    if (demo !== undefined) setDemo(demo);
+    // Demo data is cached under the real query keys: start clean once approved.
+    const wasDemo = useRef(demo);
+    useEffect(() => {
+        if (wasDemo.current && demo === false) window.location.reload();
+        wasDemo.current = demo;
+    }, [demo]);
     const me = useQuery({
         queryKey: ["me"],
         queryFn: () => api<{ id: string; isAdmin?: boolean }>("/me"),
-        enabled: !!getInitData(),
+        enabled: demo !== undefined,
         retry: false,
     });
     const go = (t: Tab) => {
@@ -69,22 +88,24 @@ export default function App() {
                 <Hint>Open this app from Telegram.</Hint>
             </div>
         );
-    if (me.isLoading)
+    if (access.error || me.error)
+        return (
+            <div className="p-6">
+                <ErrorText error={access.error || me.error} />
+            </div>
+        );
+    if (access.isPending || me.isPending)
         return (
             <div className="mx-auto max-w-xl px-4 pt-4">
                 <Skeleton />
             </div>
         );
-    if (me.error)
-        return (
-            <div className="p-6">
-                <ErrorText error={me.error} />
-            </div>
-        );
 
     return (
         <div className="tnum mx-auto max-w-xl px-4 pt-4 pb-28">
-            {tab === "home" && <Home go={go} />}
+            {tab === "home" && (
+                <Home go={go} access={demo ? access.data : undefined} />
+            )}
             {tab === "deposit" && <Deposit />}
             {tab === "withdraw" && <Withdraw />}
             {tab === "relock" && <Relock />}
