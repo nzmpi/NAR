@@ -284,17 +284,29 @@ export async function settleInTx(
     });
 
     // Yield shares go to each lot; cap state is saved for every lot.
+    // Cap use is net for the lot-year: a loss lowers it (it can go below 0),
+    // so the lot earns in full again until it is back at base + cap.
     const creditByLot = new Map(result.lotCredits.map((c) => [c.lotId, c]));
     for (const l of userLots) {
         const c = creditByLot.get(l.id);
         const st = capState.get(l.id)!;
+        const key = keyById.get(l.poolId)!;
+        const lossUsd =
+            result.pnlUsd < 0n
+                ? valueOfShares(before[key], BigInt(l.shares)) -
+                  valueOfShares(result.pools[key], BigInt(l.shares))
+                : 0n;
         await tx
             .update(positionLots)
             .set({
                 shares: sql`${positionLots.shares} + ${(c?.sharesMinted ?? 0n).toString()}::numeric`,
                 capYearStart: st.yearStart,
                 capBaseUsd: st.base.toString(),
-                capUsedUsd: (st.used + (c?.amountUsd ?? 0n)).toString(),
+                capUsedUsd: (
+                    st.used +
+                    (c?.amountUsd ?? 0n) -
+                    lossUsd
+                ).toString(),
                 updatedAt: now,
             })
             .where(eq(positionLots.id, l.id));
