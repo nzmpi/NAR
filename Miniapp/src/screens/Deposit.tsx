@@ -448,6 +448,12 @@ function IntentCard({
         return () => clearTimeout(t);
     }, [flash]);
     const onSettled = () => setFlash((n) => n + 1);
+    // Only the latest action's result shows: each new action clears the old message and error.
+    const [error, setError] = useState<unknown>(null);
+    const onMutate = () => {
+        setMsg("");
+        setError(null);
+    };
     const asset = assets.find((a) => a.assetId === i.assetId);
     const vault = vaults.find((v) => v.id === i.vaultId);
     const refresh = () => {
@@ -469,6 +475,8 @@ function IntentCard({
             );
             refresh();
         },
+        onMutate,
+        onError: setError,
         onSettled,
     });
     const attach = useMutation({
@@ -482,6 +490,8 @@ function IntentCard({
             setMsg("Transaction submitted.");
             refresh();
         },
+        onMutate,
+        onError: setError,
         onSettled,
     });
     const approve = useMutation({
@@ -490,12 +500,16 @@ function IntentCard({
                 method: "POST",
             }),
         onSuccess: refresh,
+        onMutate,
+        onError: setError,
         onSettled,
     });
     const cancel = useMutation({
         mutationFn: () =>
             api(`/me/deposits/intents/${i.id}/cancel`, { method: "POST" }),
         onSuccess: refresh,
+        onMutate,
+        onError: setError,
         onSettled,
     });
 
@@ -661,14 +675,7 @@ function IntentCard({
                         {msg && (
                             <p className="text-sm text-[var(--hint)]">{msg}</p>
                         )}
-                        <ErrorText
-                            error={
-                                check.error ||
-                                attach.error ||
-                                approve.error ||
-                                cancel.error
-                            }
-                        />
+                        <ErrorText error={error} />
                     </>
                 )}
             </Card>
