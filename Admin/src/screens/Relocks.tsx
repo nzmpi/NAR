@@ -3,7 +3,15 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { fmtUsd } from "../lib/money";
 import { POOL_NAME, type AdminRelock } from "../lib/types";
-import { Badge, Card, ErrorText, Hint, Segmented } from "../components/ui";
+import {
+    Badge,
+    Card,
+    ErrorText,
+    Hint,
+    PAGE,
+    Segmented,
+    ShowMore,
+} from "../components/ui";
 
 const FILTERS = ["pending", "applied", "failed", "cancelled", "all"] as const;
 
@@ -11,11 +19,12 @@ const FILTERS = ["pending", "applied", "failed", "cancelled", "all"] as const;
 // applies them, so there is nothing for an admin to approve here.
 export function Relocks() {
     const [filter, setFilter] = useState<(typeof FILTERS)[number]>("pending");
+    const [limit, setLimit] = useState(PAGE);
     const q = useQuery({
-        queryKey: ["admin-relocks", filter],
+        queryKey: ["admin-relocks", filter, limit],
         queryFn: () =>
             api<AdminRelock[]>(
-                `/admin/relocks${filter === "all" ? "" : `?status=${filter}`}`,
+                `/admin/relocks?limit=${limit}${filter === "all" ? "" : `&status=${filter}`}`,
             ),
         refetchInterval: 30_000,
     });
@@ -45,6 +54,11 @@ export function Relocks() {
                     <Row key={r.request.id} r={r} />
                 ))}
             </div>
+            <ShowMore
+                count={q.data?.length ?? 0}
+                limit={limit}
+                onMore={() => setLimit(limit + PAGE)}
+            />
         </div>
     );
 }

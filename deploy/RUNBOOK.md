@@ -26,7 +26,7 @@ Sessions last 3 days without use and 10 days at most. A new IP (other Wi-Fi, VPN
 
 ## Fresh database
 
-1. Set `DATABASE_URL` and `TAG` in `.env`.
+1. Set `DATABASE_URL`, `TAG` and `TRUST_PROXY_HOPS=1` (Caddy is the one proxy hop) in `.env`. The backend refuses to start in prod without it.
 2. Apply all migrations. They also seed the pools.
    ```bash
    docker compose run --rm backend node dist/migrate.js

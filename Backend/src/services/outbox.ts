@@ -67,10 +67,15 @@ async function sendTelegram(chatId: string, text: string): Promise<SendResult> {
     }
 }
 
-// Claims a batch with SKIP LOCKED, sends, records the outcome. Returns rows handled.
+// While a batch is being sent, its rows are leased: pushed out this far so
+// no other worker picks them up. A crash just means a retry after the lease.
+const LEASE_MS = 5 * 60_000;
+
+// Claims a batch (short transaction), sends outside any transaction, then
+// records each outcome. Returns rows handled.
 export async function drainOutbox(log: Log): Promise<number> {
-    return db.transaction(async (tx) => {
-        const rows = await tx
+    const rows = await db.transaction(async (tx) => {
+        const due = await tx
             .select({ n: notificationOutbox, tg: users.telegramId })
             .from(notificationOutbox)
             .innerJoin(users, eq(users.id, notificationOutbox.userId))
@@ -83,37 +88,44 @@ export async function drainOutbox(log: Log): Promise<number> {
             .orderBy(notificationOutbox.createdAt)
             .limit(BATCH)
             .for("update", { of: notificationOutbox, skipLocked: true });
-        for (const { n, tg } of rows) {
-            const r = await sendTelegram(tg, n.text);
-            if (r.ok) {
-                await tx
-                    .update(notificationOutbox)
-                    .set({
-                        status: "sent",
-                        sentAt: new Date(),
-                        attempts: n.attempts + 1,
-                        lastError: null,
-                    })
-                    .where(eq(notificationOutbox.id, n.id));
-                continue;
-            }
-            const attempts = n.attempts + 1;
-            const dead = r.permanent || attempts >= MAX_ATTEMPTS;
-            if (dead) log.error(`notification ${n.id} failed: ${r.error}`);
+        for (const { n } of due)
             await tx
                 .update(notificationOutbox)
+                .set({ nextAttemptAt: new Date(Date.now() + LEASE_MS) })
+                .where(eq(notificationOutbox.id, n.id));
+        return due;
+    });
+
+    for (const { n, tg } of rows) {
+        const r = await sendTelegram(tg, n.text);
+        if (r.ok) {
+            await db
+                .update(notificationOutbox)
                 .set({
-                    status: dead ? "failed" : "pending",
-                    attempts,
-                    lastError: r.error,
-                    nextAttemptAt: new Date(
-                        Date.now() + (r.retryAfterMs ?? backoffMs(attempts)),
-                    ),
+                    status: "sent",
+                    sentAt: new Date(),
+                    attempts: n.attempts + 1,
+                    lastError: null,
                 })
                 .where(eq(notificationOutbox.id, n.id));
+            continue;
         }
-        return rows.length;
-    });
+        const attempts = n.attempts + 1;
+        const dead = r.permanent || attempts >= MAX_ATTEMPTS;
+        if (dead) log.error(`notification ${n.id} failed: ${r.error}`);
+        await db
+            .update(notificationOutbox)
+            .set({
+                status: dead ? "failed" : "pending",
+                attempts,
+                lastError: r.error,
+                nextAttemptAt: new Date(
+                    Date.now() + (r.retryAfterMs ?? backoffMs(attempts)),
+                ),
+            })
+            .where(eq(notificationOutbox.id, n.id));
+    }
+    return rows.length;
 }
 
 // OUTBOX_INTERVAL_SECONDS=0 disables the worker.

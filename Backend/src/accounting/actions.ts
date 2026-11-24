@@ -51,24 +51,6 @@ export function applyMaturity(
     return { pools: p, usd: b.usd, liquidShares: m.shares };
 }
 
-// Relock/extend: burn exact source shares, mint into a target pool.
-export function applyMove(
-    pools: Pools,
-    from: PoolKey,
-    fromShares: bigint,
-    to: PoolKey,
-    usd?: bigint,
-) {
-    const p = clonePools(pools);
-    const b = burn(p[from], fromShares);
-    const amt = usd ?? b.usd;
-    if (amt > b.usd) throw new Error("move exceeds value");
-    const m = mint(p[to], amt);
-    p[from] = b.state;
-    p[to] = m.state;
-    return { pools: p, usd: amt, shares: m.shares };
-}
-
 export interface WithdrawalQuote {
     sharesBurned: bigint;
     grossUsd: bigint;
@@ -100,17 +82,4 @@ export function quoteWithdrawal(
         feeUsd: fee,
         netUsd: gross - fee,
     };
-}
-
-// Execute at payment/reservation time. Fee stays in system as manager NAV.
-export function applyWithdrawal(
-    pools: Pools,
-    poolKey: PoolKey,
-    q: WithdrawalQuote,
-) {
-    const p = clonePools(pools);
-    const b = burn(p[poolKey], q.sharesBurned);
-    p[poolKey] = b.state;
-    p.manager.assets += q.feeUsd; // no shares minted
-    return { pools: p, paidOutUsd: q.netUsd };
 }

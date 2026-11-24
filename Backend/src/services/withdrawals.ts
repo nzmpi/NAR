@@ -7,6 +7,7 @@ import {
     payoutAddresses,
     positionLots,
     users,
+    vaults,
     withdrawalAllocations,
     withdrawals,
 } from "../db/schema.js";
@@ -193,6 +194,15 @@ async function buildQuote(tx: Tx, i: WithdrawalRequestInput) {
         throw new AppError("Minimum withdrawal is 5 USD", 400, "below_minimum");
     if (!EVM_ADDRESS.test(i.destinationAddress))
         throw new AppError("Invalid payout address", 400, "bad_address");
+    // The zero address and vault addresses would lose or strand the payout (the Factory is checked in the route).
+    const dest = i.destinationAddress.toLowerCase();
+    const [ownVault] = await tx
+        .select({ id: vaults.id })
+        .from(vaults)
+        .where(eq(vaults.address, dest))
+        .limit(1);
+    if (/^0x0{40}$/.test(dest) || ownVault)
+        throw new AppError("Payout address is not allowed", 400, "bad_address");
 
     const [user] = await tx
         .select()
@@ -482,6 +492,13 @@ export function markWithdrawalPaid(
         if (!w) throw new AppError("Withdrawal not found", 404, "not_found");
         if (w.status !== "pending")
             throw new AppError("Withdrawal is not pending", 409, "bad_state");
+        // The lock is the admin's "funds may be sent" mark; the user can no longer cancel.
+        if (!w.lockedAt)
+            throw new AppError(
+                "Lock the withdrawal before marking it paid",
+                409,
+                "not_locked",
+            );
         const [asset] = await tx
             .select()
             .from(assets)
@@ -559,9 +576,15 @@ export function markWithdrawalPaid(
                 });
 
             const newShares = BigInt(lot.shares) - f.burnShares;
+            // Principal leaves with the shares, same as a relock (keeps yield = value - principal).
+            const carried =
+                (BigInt(lot.principalUsd) * f.burnShares) / BigInt(lot.shares);
             await tx
                 .update(positionLots)
                 .set({
+                    principalUsd: (
+                        BigInt(lot.principalUsd) - carried
+                    ).toString(),
                     shares: newShares.toString(),
                     reservedShares: (
                         BigInt(lot.reservedShares) - BigInt(a.shares)

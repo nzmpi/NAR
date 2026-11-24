@@ -13,6 +13,8 @@ import {
     Segmented,
     Warn,
     Onchain,
+    PAGE,
+    ShowMore,
 } from "../components/ui";
 
 export const NEEDS_ACTION = ["transfer_detected", "ready_to_activate"];
@@ -44,9 +46,10 @@ const lsSet = (k: string, v: string) => {
 
 export function Deposits() {
     const [group, setGroup] = useState<Group>("needs action");
+    const [limit, setLimit] = useState(PAGE);
     const q = useQuery({
-        queryKey: ["admin-deposits"],
-        queryFn: () => api<AdminDeposit[]>("/admin/deposits"),
+        queryKey: ["admin-deposits", limit],
+        queryFn: () => api<AdminDeposit[]>(`/admin/deposits?limit=${limit}`),
         refetchInterval: 30_000,
     });
     const pools = useQuery({
@@ -96,6 +99,11 @@ export function Deposits() {
                     />
                 ))}
             </div>
+            <ShowMore
+                count={q.data?.length ?? 0}
+                limit={limit}
+                onMore={() => setLimit(limit + PAGE)}
+            />
         </div>
     );
 }

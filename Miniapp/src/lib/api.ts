@@ -15,7 +15,9 @@ export class ApiError extends Error {
 export function getInitData(): string {
     return (
         window.Telegram?.WebApp?.initData ||
-        (import.meta.env.VITE_DEV_INIT_DATA as string) ||
+        // Dev builds only: a real initData in a production bundle would be a live login.
+        (import.meta.env.DEV &&
+            (import.meta.env.VITE_DEV_INIT_DATA as string)) ||
         ""
     );
 }

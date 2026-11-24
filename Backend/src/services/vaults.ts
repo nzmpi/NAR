@@ -191,16 +191,18 @@ export async function markVaultDeployed(
     } else if (config.APP_ENV === "prod") {
         throw new AppError("No RPC configured for this chain", 503, "no_rpc");
     }
-    await database
-        .update(vaults)
-        .set({ isDeployed: true, deployTxHash: deployTxHash.toLowerCase() })
-        .where(eq(vaults.id, vaultId));
-    await database.insert(auditLogs).values({
-        adminId,
-        action: "vault.deployed",
-        entityType: "vault",
-        entityId: vaultId,
-        details: { deployTxHash: deployTxHash.toLowerCase() },
+    await database.transaction(async (tx) => {
+        await tx
+            .update(vaults)
+            .set({ isDeployed: true, deployTxHash: deployTxHash.toLowerCase() })
+            .where(eq(vaults.id, vaultId));
+        await tx.insert(auditLogs).values({
+            adminId,
+            action: "vault.deployed",
+            entityType: "vault",
+            entityId: vaultId,
+            details: { deployTxHash: deployTxHash.toLowerCase() },
+        });
     });
 }
 

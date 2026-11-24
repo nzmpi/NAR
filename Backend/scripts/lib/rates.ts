@@ -1,4 +1,4 @@
-import { P, SECONDS_PER_YEAR } from "./fixed.js";
+import { P, SECONDS_PER_YEAR } from "../../src/accounting/fixed.js";
 
 // ln(1 + bps/10000) at precision P, via 2*atanh((x-1)/(x+1)).
 export function ln1pBps(apyBps: number): bigint {

@@ -9,8 +9,8 @@ import {
     autoMatchTransfer,
     createIntent,
     recordSweep,
-    recordTransfer,
 } from "../src/services/depositIntents.js";
+import { recordTransfer } from "./lib/harness.js";
 import { settleManual } from "../src/services/settlement.js";
 import { adminListUsers, getPortfolio } from "../src/services/queries.js";
 

@@ -3,12 +3,13 @@ import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import * as s from "../../src/db/schema.js";
+import { AppError } from "../../src/errors.js";
+import type { Database } from "../../src/services/types.js";
 import {
     activateDeposit,
     autoMatchTransfer,
     createIntent,
     recordSweep,
-    recordTransfer,
 } from "../../src/services/depositIntents.js";
 
 export const U = 1_000_000n;
@@ -143,6 +144,7 @@ export async function setup() {
                 key: s.pools.key,
                 shares: s.positionLots.shares,
                 reserved: s.positionLots.reservedShares,
+                principalUsd: s.positionLots.principalUsd,
                 maturesAt: s.positionLots.maturesAt,
             })
             .from(s.positionLots)
@@ -157,6 +159,7 @@ export async function setup() {
             ...r,
             shares: BigInt(r.shares),
             reserved: BigInt(r.reserved),
+            principal: BigInt(r.principalUsd),
         }));
     }
 
@@ -204,4 +207,63 @@ export async function setup() {
         totalNav,
         checkInvariants,
     };
+}
+
+const TX_HASH = /^0x[a-fA-F0-9]{64}$/;
+
+// Test helper: records a chain transfer row (production code only ingests verified logs).
+export interface RecordTransferInput {
+    vaultId: string;
+    assetId: string;
+    txHash: string;
+    logIndex: number;
+    amount: bigint; // token units
+    fromAddress?: string;
+    blockNumber?: bigint;
+    blockTimestamp?: Date;
+}
+
+// NOTE: no onchain verification yet (RPC pending). Admin/scanner supplies it.
+// Never credits anything: transfers stay unmatched/pending until a sweep.
+export function recordTransfer(database: Database, i: RecordTransferInput) {
+    return database.transaction(async (tx) => {
+        if (!TX_HASH.test(i.txHash))
+            throw new AppError("Invalid transaction hash", 400, "bad_tx");
+        if (!Number.isInteger(i.logIndex) || i.logIndex < 0)
+            throw new AppError("Invalid log index", 400, "bad_log");
+        if (i.amount <= 0n)
+            throw new AppError("Amount must be positive", 400, "bad_amount");
+        const [vault] = await tx
+            .select()
+            .from(s.vaults)
+            .where(eq(s.vaults.id, i.vaultId))
+            .limit(1);
+        const [asset] = await tx
+            .select()
+            .from(s.assets)
+            .where(and(eq(s.assets.id, i.assetId), eq(s.assets.isActive, true)))
+            .limit(1);
+        if (!vault || !asset || vault.chainId !== asset.chainId)
+            throw new AppError(
+                "Asset is not supported on this vault's chain",
+                400,
+                "bad_asset",
+            );
+
+        const [t] = await tx
+            .insert(s.depositTransfers)
+            .values({
+                chainId: vault.chainId,
+                txHash: i.txHash.toLowerCase(),
+                logIndex: i.logIndex,
+                vaultId: i.vaultId,
+                assetId: i.assetId,
+                fromAddress: i.fromAddress ?? null,
+                amount: i.amount.toString(),
+                blockNumber: i.blockNumber?.toString() ?? null,
+                blockTimestamp: i.blockTimestamp ?? null,
+            })
+            .returning();
+        return t;
+    });
 }
