@@ -61,7 +61,11 @@ export function Withdraw() {
                 method: "POST",
                 body: b,
             }),
-        onSuccess: setQuote,
+        // A new quote starts clean: an earlier Confirm error belongs to the old one.
+        onSuccess: (q) => {
+            submit.reset();
+            setQuote(q);
+        },
     });
     const submit = useMutation({
         mutationFn: (b: object) =>
