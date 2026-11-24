@@ -13,6 +13,7 @@ import {
 } from "../../db/schema.js";
 import { requireAdmin } from "../auth.js";
 import {
+    closePendingRequest,
     decideAccessRequest,
     listAccessRequests,
 } from "../../services/accessRequests.js";
@@ -622,7 +623,8 @@ export async function adminRoutes(app: FastifyInstance) {
                     .values({ ...b, addedBy: req.admin!.id })
                     .onConflictDoNothing()
                     .returning();
-                if (r.length)
+                if (r.length) {
+                    await closePendingRequest(tx, b.telegramId, req.admin!.id);
                     await audit(
                         tx,
                         req.admin!.id,
@@ -631,6 +633,7 @@ export async function adminRoutes(app: FastifyInstance) {
                         b.telegramId,
                         b,
                     );
+                }
             });
             return null;
         }),

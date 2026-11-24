@@ -100,6 +100,24 @@ export function listAccessRequests(
         .limit(limit);
 }
 
+// Manual allowlist add answers any pending request from that ID, so a later
+// reject can't tell someone who has access that they were declined.
+export async function closePendingRequest(
+    database: Database,
+    telegramId: string,
+    adminId: string,
+) {
+    await database
+        .update(accessRequests)
+        .set({ status: "approved", decidedAt: new Date(), decidedBy: adminId })
+        .where(
+            and(
+                eq(accessRequests.telegramId, telegramId),
+                eq(accessRequests.status, "pending"),
+            ),
+        );
+}
+
 // Approve adds the ID to the allowlist. The user gets a bot message either way.
 export function decideAccessRequest(
     database: Database,

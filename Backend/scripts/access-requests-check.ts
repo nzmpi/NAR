@@ -139,6 +139,26 @@ ok(
     "request with access is a no-op",
 );
 
+// Manual allowlist add closes a pending request, so it can't be rejected.
+await req("8", t0);
+await db.insert(s.userAllowlist).values({ telegramId: "8", addedBy: admin.id });
+await a.closePendingRequest(db, "8", admin.id);
+ok(
+    (await a.listAccessRequests(db, "pending")).every(
+        (x) => x.telegramId !== "8",
+    ),
+    "manual add closes the pending request",
+);
+await rejects(
+    a.decideAccessRequest(db, {
+        telegramId: "8",
+        adminId: admin.id,
+        approve: false,
+    }),
+    "bad_state",
+    "closed request cannot be rejected",
+);
+
 // Blocked users are not offered a request.
 await db.insert(s.users).values({ telegramId: "5", isBlocked: true });
 ok((await status("5", day(35))) === "blocked", "blocked user: blocked");
