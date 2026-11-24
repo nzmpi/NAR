@@ -60,7 +60,7 @@ export default function App() {
         retry: false,
         // Notice an approval while the app is open.
         refetchInterval: (q) =>
-            q.state.data?.status === "pending" ? 30_000 : false,
+            q.state.data?.status === "pending" ? 10 * 60_000 : false,
     });
     const demo = access.data ? access.data.status !== "approved" : undefined;
     // Set before any screen mounts, so every request sees the right mode.
