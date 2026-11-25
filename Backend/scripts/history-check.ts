@@ -44,10 +44,7 @@ const apUp = await adminPerformance(db, "all", day(30));
 const ret = (k: string) =>
     apUp.pools.find((p) => p.pool === k)?.cumulativeReturn ?? 0;
 ok(Math.abs(ret("liquid") - 0.006087172) < 1e-9, "admin liquid pool return");
-ok(
-    Math.abs(ret("manager") - 0.0093912828) < 1e-9,
-    "admin manager pool return",
-);
+ok(Math.abs(ret("manager") - 0.0093912828) < 1e-9, "admin manager pool return");
 
 // Loss: NAV falls to 10,000 (~ -10%)
 await settleManual(db, {
