@@ -7,6 +7,7 @@ import {
     settlements,
 } from "../db/schema.js";
 import {
+    capAllowanceUsd,
     settle,
     type BonusRequest,
     type LotInput,
@@ -120,9 +121,10 @@ export async function settleInTx(
     const t0 = toSeconds(intervalStart);
     const t1 = toSeconds(now);
 
-    // Every open user lot with its yearly cap state. A lot-year starts at
-    // openedAt (maturity and relock lots inherit it from their parent); at
-    // each anniversary the base resets to the lot's value.
+    // Every open user lot with its cap state. A lot-year starts at openedAt
+    // (maturity and relock lots inherit it from their parent); at each
+    // anniversary the base resets to the lot's value. The cap opens weekly
+    // within the year, with unused cap carried over (capAllowanceUsd).
     // shortcut: the anniversary is applied at the first settlement after it,
     // fine while settlements are frequent.
     const userLots = await tx
@@ -174,7 +176,9 @@ export async function settleInTx(
             poolKey: key,
             shares: BigInt(l.shares),
             apyBps,
-            capLeftUsd: (base * BigInt(APY_BPS[key])) / 10_000n - used,
+            capLeftUsd:
+                capAllowanceUsd(base, APY_BPS[key], t1 - toSeconds(yearStart)) -
+                used,
         });
     }
 

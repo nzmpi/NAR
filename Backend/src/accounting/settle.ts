@@ -11,7 +11,7 @@ import {
 
 // One open user lot. The service works out its effective APY for the
 // interval (time-weighted when a lock matured inside it) and how much of its
-// yearly cap is left.
+// cap is left (capAllowanceUsd minus what it has used this lot-year).
 export interface LotInput {
     lotId: string;
     poolKey: Exclude<PoolKey, "manager">;
@@ -59,12 +59,28 @@ export interface SettleResult {
     lotCredits: LotCredit[];
 }
 
-// Above its yearly cap a lot keeps this fraction of its share.
+// Above its cap a lot keeps this fraction of its share.
 export const OVER_CAP_DIVISOR = 10n;
+
+const WEEK_SECONDS = 7n * 86_400n;
+
+// Cap a lot may have earned so far in its lot-year. Each started 7-day week
+// adds yearly cap * 7/365; unused cap carries over until the yearly reset,
+// and the last (partial) week tops it up to exactly base * APY.
+export function capAllowanceUsd(
+    base: bigint,
+    apyBps: number,
+    secondsIntoYear: bigint,
+): bigint {
+    if (base <= 0n) return 0n;
+    let days = (secondsIntoYear / WEEK_SECONDS + 1n) * 7n;
+    if (days > 365n) days = 365n;
+    return (base * BigInt(apyBps) * days) / (10_000n * 365n);
+}
 
 // Splits positive P&L. The manager pool takes its NAV share. User lots split
 // the rest by value * APY; each lot gets its share in full while under its
-// yearly cap, and 1/10 of the part above it. The other 9/10 and rounding
+// cap, and 1/10 of the part above it. The other 9/10 and rounding
 // dust go to the manager.
 export function lotCredits(
     pools: Pools,

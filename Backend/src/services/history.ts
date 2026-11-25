@@ -8,7 +8,6 @@ import {
     userBalanceSnapshots,
     userFlows,
 } from "../db/schema.js";
-import { SHARE_SCALE } from "../accounting/fixed.js";
 import {
     POOL_KEYS,
     valueOfShares,
@@ -255,8 +254,10 @@ export async function computePerformance(
     };
 }
 
-// Admin only: gross pool performance (share-price returns, flow independent)
-// plus the settlement allocation totals in the window.
+// Admin only: gross pool performance (flow independent) plus the settlement
+// allocation totals in the window. Profit is minted to lots as new shares, so
+// the share price does not show it; each settlement's return is its P&L
+// allocation over the pool's NAV before it (bonuses are transfers, left out).
 export async function adminPerformance(
     database: Database,
     range: PerfRange,
@@ -265,30 +266,59 @@ export async function adminPerformance(
     const rows = await database
         .select({
             key: pools.key,
+            settlementId: poolSnapshots.settlementId,
             takenAt: poolSnapshots.takenAt,
-            assets: poolSnapshots.totalAssetsUsd,
             shares: poolSnapshots.totalShares,
         })
         .from(poolSnapshots)
         .innerJoin(pools, eq(pools.id, poolSnapshots.poolId))
         .orderBy(poolSnapshots.takenAt);
+    const allocs = await database
+        .select({
+            key: pools.key,
+            settlementId: settlementAllocations.settlementId,
+            amountUsd: settlementAllocations.amountUsd,
+            navBeforeUsd: settlementAllocations.navBeforeUsd,
+        })
+        .from(settlementAllocations)
+        .innerJoin(pools, eq(pools.id, settlementAllocations.poolId))
+        .where(
+            inArray(settlementAllocations.kind, [
+                "loss",
+                "participant_yield",
+                "manager_excess",
+            ]),
+        );
+    const pnlBy = new Map<string, { nav: bigint; pnl: bigint }>();
+    for (const a of allocs) {
+        const k = `${a.settlementId}:${a.key}`;
+        const g = pnlBy.get(k) ?? { nav: BigInt(a.navBeforeUsd), pnl: 0n };
+        g.pnl += BigInt(a.amountUsd);
+        pnlBy.set(k, g);
+    }
 
     const perPool = POOL_KEYS.map((key) => {
         const nodes: Node[] = [];
-        let prev: bigint | null = null;
-        for (const r of rows.filter((x) => x.key === key)) {
-            const shares = BigInt(r.shares);
-            if (shares === 0n) {
-                prev = null;
+        const list = rows.filter((x) => x.key === key);
+        for (let i = 0; i < list.length; i++) {
+            const r = list[i];
+            // An empty snapshot only counts as the start of a funded run
+            // (pre-action snapshots are taken before the first deposit mints).
+            if (
+                BigInt(r.shares) === 0n &&
+                BigInt(list[i + 1]?.shares ?? 0) === 0n
+            )
                 continue;
-            }
-            const price = (BigInt(r.assets) * SHARE_SCALE) / shares;
+            // No allocation row: the pool's NAV did not move at that settlement.
+            const g = pnlBy.get(`${r.settlementId}:${key}`) ?? {
+                nav: 1n,
+                pnl: 0n,
+            };
             nodes.push({
                 t: r.takenAt,
                 ratioFromPrev:
-                    prev !== null && prev > 0n ? ratioNum(price, prev) : null,
+                    g.nav > 0n ? ratioNum(g.nav + g.pnl, g.nav) : null,
             });
-            prev = price;
         }
         const s = summarize(nodes, range, now);
         return {

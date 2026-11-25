@@ -37,6 +37,14 @@ ok(
     "positive return after a gain",
 );
 ok(up.points.length >= 1, "performance has points");
+// Pool return comes from yield allocations, not the share price (which profit minting leaves flat).
+// Alice's share is 9.090910, but day 30 is in week 5, so her cap is 60 * 35/365
+// = 5.753424; she gets that + 1/10 of the rest = 6.087172. Manager gets 93.912828.
+const apUp = await adminPerformance(db, "all", day(30));
+const ret = (k: string) =>
+    apUp.pools.find((p) => p.pool === k)?.cumulativeReturn ?? 0;
+ok(Math.abs(ret("liquid") - 0.006087172) < 1e-9, "admin liquid pool return");
+ok(Math.abs(ret("manager") - 0.0093912828) < 1e-9, "admin manager pool return");
 
 // Loss: NAV falls to 10,000 (~ -10%)
 await settleManual(db, {

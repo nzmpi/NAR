@@ -11,7 +11,6 @@ import {
     burn,
     clonePools,
     sharesForWithdrawal,
-    valueOfShares,
     LOCK_KEYS,
     type LockKey,
     type PoolKey,
@@ -126,15 +125,12 @@ export function requestRelock(
                 if (item.amountUsd === undefined || item.amountUsd <= 0n)
                     throw new AppError("Invalid amount", 400, "bad_amount");
                 shares = sharesForWithdrawal(pools[key], item.amountUsd);
-                if (shares > avail) {
-                    if (valueOfShares(pools[key], avail) < item.amountUsd)
-                        throw new AppError(
-                            "Amount exceeds the available value of the position",
-                            400,
-                            "bad_amount",
-                        );
-                    shares = avail;
-                }
+                if (shares > avail)
+                    throw new AppError(
+                        "Amount exceeds the available value of the position",
+                        400,
+                        "bad_amount",
+                    );
             }
             if (shares <= 0n)
                 throw new AppError(
