@@ -9,7 +9,11 @@ import {
 } from "../src/accounting/actions.js";
 import { burn, clonePools } from "../src/accounting/pools.js";
 import { type PoolKey } from "../src/accounting/pools.js";
-import { settle, type LotInput } from "../src/accounting/settle.js";
+import {
+    capAllowanceUsd,
+    settle,
+    type LotInput,
+} from "../src/accounting/settle.js";
 
 const U = 1_000_000n;
 
@@ -213,5 +217,32 @@ const w = applyWithdrawal(p, "lock_3m", q);
 assert(
     totalAssets(w.pools) === totalAssets(p) - 360n * U,
     "withdrawal: NAV drops by net only",
+);
+
+// Weekly cap with carry-over: 1,000 at 6% -> 60/yr, 60 * 7/365 per started week.
+const D = 86_400n;
+const week = (60n * U * 7n) / 365n; // 1.150684 USD
+assert(
+    capAllowanceUsd(1_000n * U, 600, 0n) === week,
+    "cap: week 1 opens 7/365",
+);
+assert(
+    capAllowanceUsd(1_000n * U, 600, 7n * D - 1n) === week,
+    "cap: same week",
+);
+assert(
+    capAllowanceUsd(1_000n * U, 600, 7n * D) === (60n * U * 14n) / 365n,
+    "cap: week 2 adds another 7/365",
+);
+assert(
+    capAllowanceUsd(1_000n * U, 600, 364n * D) === 60n * U,
+    "cap: full year by the last day",
+);
+// Half of week 1 used -> week 2 has 1.5 weeks of room.
+const used = week / 2n;
+assert(
+    capAllowanceUsd(1_000n * U, 600, 8n * D) - used ===
+        (60n * U * 14n) / 365n - week / 2n,
+    "cap: unused week-1 room carries into week 2",
 );
 console.log("accounting ok");

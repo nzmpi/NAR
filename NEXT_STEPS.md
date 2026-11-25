@@ -74,6 +74,7 @@ Mark a step done by changing `[ ]` to `[x]`.
 - [x] **Manager deposits** — admins see a Manager pool option in the Mini App deposit form (`/me` returns `isAdmin`).
 - [x] **Manager withdrawals** — the Mini App shows manager funds to admins and counts them as fee-free in the withdraw form.
 - [x] **Yearly lot caps** — profit is split by NAV with the manager, then by value × APY across user lots; each lot earns in full up to a yearly cap (value × tier APY), then 1/10.
+- [x] **Weekly cap release** — the yearly cap opens 7/365 per started week of the lot-year; unused cap carries over until the yearly reset.
 - [x] **Week-long admin session** — sliding session: 3 days idle, 10 days max, bound to the login IP and browser. `/admin` on the API host needs the proxy secret that only the Vercel middleware sends.
 - [ ] **Admin proxy secret** — set the same random `ADMIN_PROXY_SECRET` in the Admin Vercel project and in the server `.env`, then deploy both (`deploy/RUNBOOK.md`).
 - [ ] **Accounting flow** — settlement (incl. large-move guard), maturity, relock, bonus.
