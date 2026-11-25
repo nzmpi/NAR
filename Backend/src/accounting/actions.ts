@@ -67,13 +67,9 @@ export function quoteWithdrawal(
     early: boolean,
 ): WithdrawalQuote {
     const s = pools[poolKey];
-    let shares = sharesForWithdrawal(s, grossUsd);
-    if (shares > lotAvailableShares) {
-        // Allow "max": exact remaining value, not a larger request.
-        if (valueOfShares(s, lotAvailableShares) < grossUsd)
-            throw new Error("exceeds lot value");
-        shares = lotAvailableShares;
-    }
+    // "Max" (grossUsd = the lot's floor value) always fits: ceil never needs more shares.
+    const shares = sharesForWithdrawal(s, grossUsd);
+    if (shares > lotAvailableShares) throw new Error("exceeds lot value");
     const gross = valueOfShares(s, shares);
     const fee = early ? mulDivFloor(gross, EARLY_FEE_BPS, 10_000n) : 0n;
     return {
