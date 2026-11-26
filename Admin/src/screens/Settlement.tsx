@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, useAction } from "../lib/api";
 import { fmtUsd, parseUnits } from "../lib/money";
 import type { Tab } from "../App";
@@ -8,8 +8,10 @@ import type {
     AdminSettlement,
     AdminUser,
     AdminUserPortfolio,
+    SettlementPreview,
     SettlementResult,
 } from "../lib/types";
+import { POOL_NAME } from "../lib/types";
 import {
     Button,
     Card,
@@ -42,22 +44,32 @@ export function Settlement({ go }: { go: (t: Tab) => void }) {
         queryFn: () => api<AdminSettlement[]>("/admin/settlements"),
     });
 
+    const body = (reportedTotalUsd: string) => ({
+        reportedTotalUsd,
+        confirmLargeMove: checked || undefined,
+        note: note || undefined,
+        bonuses: bonuses.length
+            ? bonuses.map((b) => ({
+                  lotId: b.lotId,
+                  amountUsd: parseUnits(b.amount, 6)!.toString(),
+              }))
+            : undefined,
+    });
+    // Review runs the settlement on the server and rolls it back.
+    const preview = useMutation({
+        mutationFn: (reportedTotalUsd: string) =>
+            api<SettlementPreview>("/admin/settlements/preview", {
+                method: "POST",
+                body: body(reportedTotalUsd),
+            }),
+        onSuccess: () => setConfirm(true),
+    });
     const run = useAction({
         mutationFn: (reportedTotalUsd: string, key) =>
             api<SettlementResult>("/admin/settlements", {
                 method: "POST",
                 key,
-                body: {
-                    reportedTotalUsd,
-                    confirmLargeMove: checked || undefined,
-                    note: note || undefined,
-                    bonuses: bonuses.length
-                        ? bonuses.map((b) => ({
-                              lotId: b.lotId,
-                              amountUsd: parseUnits(b.amount, 6)!.toString(),
-                          }))
-                        : undefined,
-                },
+                body: body(reportedTotalUsd),
             }),
         onSuccess: () => {
             setValue("");
@@ -239,15 +251,16 @@ export function Settlement({ go }: { go: (t: Tab) => void }) {
                         maxLength={500}
                     />
                 </label>
-                <ErrorText error={run.error} />
+                {confirm && preview.data && <Review p={preview.data} />}
+                <ErrorText error={preview.error || run.error} />
                 <div className="flex flex-wrap justify-end gap-2">
                     {!confirm ? (
                         <Button
                             className="!h-11 px-6"
-                            disabled={!ok}
-                            onClick={() => setConfirm(true)}
+                            disabled={!ok || preview.isPending}
+                            onClick={() => preview.mutate(next!.toString())}
                         >
-                            Review
+                            {preview.isPending ? "Calculating…" : "Review"}
                         </Button>
                     ) : (
                         <>
@@ -431,6 +444,123 @@ function AddBonus({
                     </Button>
                 </div>
             )}
+        </div>
+    );
+}
+
+// What Confirm will record, from a dry run of the same settlement.
+function Review({ p }: { p: SettlementPreview }) {
+    const pnl = BigInt(p.pnlUsd);
+    const days =
+        (new Date(p.settledAt).getTime() -
+            new Date(p.intervalStart).getTime()) /
+        86_400_000;
+    const notes = [
+        pnl > 0n &&
+            `${p.lotsCredited} position${p.lotsCredited === 1 ? "" : "s"} earn yield` +
+                (p.cappedLots
+                    ? `; ${p.cappedLots} reached ${p.cappedLots === 1 ? "its" : "their"} yearly cap and keep 1/10 of the part above it`
+                    : ""),
+        p.maturedLots > 0 &&
+            `${p.maturedLots} matured lock${p.maturedLots === 1 ? "" : "s"} move${p.maturedLots === 1 ? "s" : ""} to Liquid`,
+        p.relocksApplied + p.relocksFailed > 0 &&
+            `${p.relocksApplied} queued relock${p.relocksApplied === 1 ? "" : "s"} applied` +
+                (p.relocksFailed ? `, ${p.relocksFailed} fail` : ""),
+    ].filter((x): x is string => !!x);
+    return (
+        <div className="space-y-3 rounded-[14px] border border-[var(--line)] p-4 text-sm tnum">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h3 className="font-semibold">Review</h3>
+                <span className="text-xs text-[var(--hint)]">
+                    {days < 1 ? "<1" : Math.round(days)} day
+                    {Math.round(days) === 1 ? "" : "s"} since{" "}
+                    {new Date(p.intervalStart).toLocaleString()}
+                </span>
+            </div>
+            <div className="overflow-x-auto">
+                <table className="w-full min-w-[420px]">
+                    <thead className="text-xs text-[var(--hint)]">
+                        <tr>
+                            <th className="py-1.5 text-left font-medium">
+                                Pool
+                            </th>
+                            <th className="py-1.5 text-right font-medium">
+                                Now
+                            </th>
+                            <th className="py-1.5 text-right font-medium">
+                                {pnl < 0n ? "Loss" : "Yield"}
+                            </th>
+                            <th className="py-1.5 text-right font-medium">
+                                Bonus
+                            </th>
+                            <th className="py-1.5 text-right font-medium">
+                                After
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {p.pools.map((x) => {
+                            const ch = BigInt(x.changeUsd);
+                            const bo = BigInt(x.bonusUsd);
+                            return (
+                                <tr
+                                    key={x.pool}
+                                    className="border-t border-[var(--line)]"
+                                >
+                                    <td className="py-1.5">
+                                        {POOL_NAME[x.pool] ?? x.pool}
+                                    </td>
+                                    <td className="py-1.5 text-right">
+                                        ${fmtUsd(x.beforeUsd)}
+                                    </td>
+                                    <td
+                                        className="py-1.5 text-right"
+                                        style={{ color: toneOf(ch) }}
+                                    >
+                                        {ch ? signedUsd(ch, fmtUsd) : "–"}
+                                    </td>
+                                    <td
+                                        className="py-1.5 text-right"
+                                        style={{ color: toneOf(bo) }}
+                                    >
+                                        {bo ? signedUsd(bo, fmtUsd) : "–"}
+                                    </td>
+                                    <td className="py-1.5 text-right font-semibold">
+                                        ${fmtUsd(x.afterUsd)}
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                        <tr className="border-t border-[var(--line)] font-semibold">
+                            <td className="py-1.5">Total</td>
+                            <td className="py-1.5 text-right">
+                                ${fmtUsd(p.previousTotalUsd)}
+                            </td>
+                            <td
+                                className="py-1.5 text-right"
+                                style={{ color: toneOf(pnl) }}
+                            >
+                                {signedUsd(pnl, fmtUsd)}
+                            </td>
+                            <td />
+                            <td className="py-1.5 text-right">
+                                ${fmtUsd(p.reportedTotalUsd)}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            {notes.length > 0 && (
+                <ul className="list-disc space-y-1 pl-5 text-[var(--hint)]">
+                    {notes.map((n) => (
+                        <li key={n}>{n}</li>
+                    ))}
+                </ul>
+            )}
+            <p className="text-xs text-[var(--hint)]">
+                Confirm recalculates at that moment, so the recorded amounts can
+                differ by a few cents from this review.
+            </p>
         </div>
     );
 }
