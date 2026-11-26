@@ -33,7 +33,7 @@ import {
     scanChain,
     verifySweepTx,
 } from "../../services/transferScanner.js";
-import { settleManual } from "../../services/settlement.js";
+import { previewSettlement, settleManual } from "../../services/settlement.js";
 import {
     lockWithdrawal,
     markWithdrawalPaid,
@@ -69,6 +69,16 @@ import {
 const statusQuery = z.object({
     status: z.string().max(40).optional(),
     limit: z.coerce.number().int().min(1).max(1000).optional(),
+});
+
+const settlementBody = z.object({
+    reportedTotalUsd: big,
+    bonuses: z
+        .array(z.object({ lotId: uuid, amountUsd: big }))
+        .max(100)
+        .optional(),
+    note: z.string().max(500).optional(),
+    confirmLargeMove: z.boolean().optional(),
 });
 
 // Pass the transaction the change runs in, so the change and its log commit together.
@@ -119,21 +129,18 @@ export async function adminRoutes(app: FastifyInstance) {
     });
 
     /* settlement: operator enters current total USD value of ALL managed funds */
+    // Same body as recording; runs the settlement and rolls it back.
+    app.post("/admin/settlements/preview", auth, async (req) =>
+        previewSettlement(db, {
+            adminId: req.admin!.id,
+            ...settlementBody.parse(req.body),
+        }),
+    );
     app.post(
         "/admin/settlements",
         auth,
         once(200, async (req) => {
-            const b = z
-                .object({
-                    reportedTotalUsd: big,
-                    bonuses: z
-                        .array(z.object({ lotId: uuid, amountUsd: big }))
-                        .max(100)
-                        .optional(),
-                    note: z.string().max(500).optional(),
-                    confirmLargeMove: z.boolean().optional(),
-                })
-                .parse(req.body);
+            const b = settlementBody.parse(req.body);
             const r = await settleManual(db, { adminId: req.admin!.id, ...b });
             return {
                 settlementId: r.settlementId,

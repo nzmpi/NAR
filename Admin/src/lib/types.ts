@@ -250,3 +250,25 @@ export interface AccessRequest {
     decidedAt: string | null;
     decidedBy: string | null;
 }
+
+// POST /admin/settlements/preview: a rolled-back run of the settlement.
+export interface SettlementPreview {
+    intervalStart: string;
+    settledAt: string;
+    previousTotalUsd: string;
+    reportedTotalUsd: string;
+    pnlUsd: string;
+    pools: {
+        pool: string;
+        beforeUsd: string;
+        afterUsd: string;
+        changeUsd: string;
+        bonusUsd: string;
+    }[];
+    bonuses: { lotId: string; pool: string; amountUsd: string }[];
+    lotsCredited: number;
+    cappedLots: number;
+    maturedLots: number;
+    relocksApplied: number;
+    relocksFailed: number;
+}

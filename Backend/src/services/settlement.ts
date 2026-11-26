@@ -11,6 +11,7 @@ import {
     settle,
     type BonusRequest,
     type LotInput,
+    type SettleResult,
 } from "../accounting/settle.js";
 import { applyMaturity } from "../accounting/actions.js";
 import {
@@ -55,6 +56,13 @@ export interface SettleOutcome {
     ids: PoolIds;
     now: Date;
     convertedLots: string[];
+    // What the review screen shows (see previewSettlement).
+    before: Pools;
+    intervalStart: Date;
+    settled: SettleResult; // P&L split, before maturities and relocks
+    cappedLots: number; // lots whose yield was cut by their yearly cap
+    lotsCredited: number;
+    relocks: { applied: number; failed: number };
 }
 
 // Runs inside the caller's transaction. Locks all pool rows, settles at
@@ -287,6 +295,11 @@ export async function settleInTx(
         lines,
     });
 
+    const cappedLots = lotInputs.filter((l) => {
+        const c = result.lotCredits.find((x) => x.lotId === l.lotId);
+        return !!c && c.amountUsd > (l.capLeftUsd > 0n ? l.capLeftUsd : 0n);
+    }).length;
+
     // Yield shares go to each lot; cap state is saved for every lot.
     // Cap use is net for the lot-year: a loss lowers it (it can go below 0),
     // so the lot earns in full again until it is back at base + cap.
@@ -441,6 +454,12 @@ export async function settleInTx(
         ids,
         now,
         convertedLots: converted,
+        before,
+        intervalStart,
+        settled: result,
+        cappedLots,
+        lotsCredited: result.lotCredits.length,
+        relocks: { applied: relocks.applied, failed: relocks.failed },
     };
 }
 
@@ -452,4 +471,59 @@ export function settleManual(
     return database.transaction((tx) =>
         settleInTx(tx, { ...o, kind: "manual" }),
     );
+}
+
+// Runs the real settlement and rolls it back, so the review screen shows
+// exactly what Confirm would record. Nothing is saved.
+class DryRun extends Error {
+    constructor(public outcome: SettleOutcome) {
+        super("dry run");
+    }
+}
+export async function previewSettlement(
+    database: Database,
+    o: Omit<SettleOptions, "kind">,
+) {
+    let r: SettleOutcome;
+    try {
+        await database.transaction(async (tx) => {
+            throw new DryRun(await settleInTx(tx, { ...o, kind: "manual" }));
+        });
+        throw new Error("unreachable");
+    } catch (e) {
+        if (!(e instanceof DryRun)) throw e;
+        r = e.outcome;
+    }
+    const s = r.settled;
+    const sum = (k: PoolKey, kinds: string[]) =>
+        s.allocations
+            .filter((a) => a.poolKey === k && kinds.includes(a.kind))
+            .reduce((t, a) => t + a.amountUsd, 0n)
+            .toString();
+    return {
+        intervalStart: r.intervalStart,
+        settledAt: r.now,
+        previousTotalUsd: totalAssets(r.before).toString(),
+        reportedTotalUsd: o.reportedTotalUsd.toString(),
+        pnlUsd: s.pnlUsd.toString(),
+        pools: (Object.keys(r.ids) as PoolKey[]).map((k) => ({
+            pool: k,
+            beforeUsd: r.before[k].assets.toString(),
+            // Final state: after matured locks move to Liquid and relocks apply.
+            afterUsd: r.pools[k].assets.toString(),
+            // Yield or loss from the P&L split; bonuses are shown apart.
+            changeUsd: sum(k, ["participant_yield", "manager_excess", "loss"]),
+            bonusUsd: sum(k, ["bonus_in", "bonus_out"]),
+        })),
+        bonuses: s.bonusMints.map((b) => ({
+            lotId: b.lotId,
+            pool: b.poolKey,
+            amountUsd: b.amountUsd.toString(),
+        })),
+        lotsCredited: r.lotsCredited,
+        cappedLots: r.cappedLots,
+        maturedLots: r.convertedLots.length,
+        relocksApplied: r.relocks.applied,
+        relocksFailed: r.relocks.failed,
+    };
 }
