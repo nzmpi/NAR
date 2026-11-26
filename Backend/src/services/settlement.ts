@@ -509,7 +509,8 @@ export async function previewSettlement(
         pools: (Object.keys(r.ids) as PoolKey[]).map((k) => ({
             pool: k,
             beforeUsd: r.before[k].assets.toString(),
-            afterUsd: s.pools[k].assets.toString(),
+            // Final state: after matured locks move to Liquid and relocks apply.
+            afterUsd: r.pools[k].assets.toString(),
             // Yield or loss from the P&L split; bonuses are shown apart.
             changeUsd: sum(k, ["participant_yield", "manager_excess", "loss"]),
             bonusUsd: sum(k, ["bonus_in", "bonus_out"]),

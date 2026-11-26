@@ -12,14 +12,18 @@ await h.deposit(
     0n,
     day(0),
 );
+// Half in a 1-month lock that matures before the settlement below.
 await h.deposit(
     "alice",
     1_000n * U,
-    [{ poolKey: "liquid", bps: 10_000 }],
+    [
+        { poolKey: "liquid", bps: 5_000 },
+        { poolKey: "lock_1m", bps: 5_000 },
+    ],
     10_000n * U,
     day(0),
 );
-const lot = (await h.openLots(alice.id))[0];
+const lot = (await h.openLots(alice.id)).find((l) => l.key === "liquid")!;
 const snapshot = async () =>
     JSON.stringify({
         pools: Object.fromEntries(
@@ -40,7 +44,7 @@ const input = {
     adminId: admin.id,
     reportedTotalUsd: 11_100n * U,
     bonuses: [{ lotId: lot.id, amountUsd: 5n * U }],
-    now: day(30),
+    now: day(40),
 };
 const before = await snapshot();
 const p = await previewSettlement(db, input);
@@ -51,7 +55,12 @@ ok(
     p.bonuses.length === 1 && p.bonuses[0].amountUsd === String(5n * U),
     "preview lists the bonus",
 );
-ok(p.lotsCredited === 1, "preview counts the credited lot");
+ok(p.lotsCredited === 2, "preview counts the credited lots");
+ok(p.maturedLots === 1, "preview counts the matured lock");
+ok(
+    p.pools.find((x) => x.pool === "lock_1m")!.afterUsd === "0",
+    "matured lock shows 0 after (moved to Liquid)",
+);
 
 await rejects(
     previewSettlement(db, { ...input, reportedTotalUsd: 20_000n * U }),
