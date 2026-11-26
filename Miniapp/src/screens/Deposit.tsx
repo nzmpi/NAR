@@ -116,6 +116,7 @@ function NewDeposit({
     const qc = useQueryClient();
     const key = useRef(newKey());
     const [assetId, setAssetId] = useState(assets[0]?.assetId ?? "");
+    const [vaultId, setVaultId] = useState("");
     const [amount, setAmount] = useState("");
     const [mode, setMode] = useState<AllocMode>("usd");
     const [raw, setRaw] = useState(NO_SPLIT);
@@ -128,11 +129,14 @@ function NewDeposit({
         : USER_POOLS;
 
     const asset = assets.find((a) => a.assetId === assetId);
-    const vault =
-        asset &&
-        vaults
-            .filter((v) => v.chainUuid === asset.chainUuid)
-            .sort((a, b) => a.nonce - b.nonce)[0];
+    // A user can have several vaults on a network (an admin adds them); the
+    // first one is the default.
+    const chainVaults = asset
+        ? vaults
+              .filter((v) => v.chainUuid === asset.chainUuid)
+              .sort((a, b) => a.nonce - b.nonce)
+        : [];
+    const vault = chainVaults.find((v) => v.id === vaultId) ?? chainVaults[0];
     const units = asset ? parseUnits(amount, asset.decimals) : null;
     // Stablecoins only, so the token amount is the dollar amount.
     const amt = Number(amount.replace(",", ".")) || 0;
@@ -231,6 +235,20 @@ function NewDeposit({
                         ))}
                     </Select>
                 </Field>
+                {chainVaults.length > 1 && (
+                    <Field label="Deposit address">
+                        <Select
+                            value={vault!.id}
+                            onChange={(e) => setVaultId(e.target.value)}
+                        >
+                            {chainVaults.map((v, n) => (
+                                <option key={v.id} value={v.id}>
+                                    {`Vault ${n + 1} · ${v.address.slice(0, 6)}…${v.address.slice(-4)}`}
+                                </option>
+                            ))}
+                        </Select>
+                    </Field>
+                )}
                 <Field label={`Amount · minimum $${minUsd}`}>
                     <span className="flex h-14 items-center rounded-[14px] border-2 border-[var(--accent)] bg-[var(--field)] px-4">
                         <span className="display text-2xl text-[var(--hint)]">
