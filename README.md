@@ -1,6 +1,25 @@
 # NAR
 
-A Telegram Mini App and bot for a private group. Users deposit stablecoins into their own deterministic vault contract, earn pooled returns from manual trading, and request manual withdrawals. An admin dashboard handles deposits, settlements and withdrawals.
+Stablecoin deposit vaults, a ledger, and settlement and withdrawal workflows for a private group. Members use a Telegram Mini App and bot; admins use a web dashboard.
+
+## What it does
+
+- **Access.** People ask to join from the Mini App. Until an admin approves them, they see a demo with sample data.
+- **Deposit vaults.** Each member gets their own vault contract per network, at an address derived from a factory. The backend scans those addresses for USDC and similar stablecoin transfers, matches them to deposit intents, and records them once they are swept to the treasury.
+- **Ledger.** Balances are held as shares in pools: a liquid pool, 1, 2 and 3 month lock pools, and a manager pool. Every deposit, settlement, relock and withdrawal is recorded as ledger lines and positions.
+- **Settlement.** An admin enters the new total value. Review shows, before anything is recorded, how the change is split across pools, which positions hit their yearly cap, and which locks mature. Confirm records it.
+- **Withdrawals and relocks.** Members request withdrawals (with an early-exit fee on locked positions) and moves between lock periods. Admins approve and pay withdrawals by hand; relocks apply at the next settlement.
+
+<p>
+  <img src="docs/screenshots/miniapp-home.jpg" width="200" alt="Mini App home: total balance and tiers">
+  <img src="docs/screenshots/miniapp-deposit.jpg" width="200" alt="Mini App deposit: network, amount and split between tiers">
+  <img src="docs/screenshots/miniapp-withdraw.jpg" width="200" alt="Mini App withdraw form">
+  <img src="docs/screenshots/miniapp-history.jpg" width="200" alt="Mini App history with a deposit's details">
+</p>
+
+<img src="docs/screenshots/admin-settlement.png" width="820" alt="Admin dashboard: settlement review per pool">
+
+All numbers in the screenshots are sample data.
 
 Full spec: [`project-context.json`](project-context.json). Roadmap: [`NEXT_STEPS.md`](NEXT_STEPS.md).
 
