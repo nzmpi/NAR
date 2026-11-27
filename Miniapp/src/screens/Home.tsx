@@ -208,9 +208,11 @@ export function Home({
                 <InProgress
                     title={count(wdOpen.length, "withdrawal")}
                     note={
-                        wdOpen.every((w) => w.lockedAt)
-                            ? "Being paid"
-                            : "Waiting for review"
+                        wdOpen.some((w) => w.awaitingUserAt)
+                            ? "Needs your OK"
+                            : wdOpen.every((w) => w.lockedAt)
+                              ? "Being paid"
+                              : "Waiting for review"
                     }
                     onClick={() => go("history")}
                 />
