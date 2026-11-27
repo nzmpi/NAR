@@ -15,7 +15,13 @@ import {
 } from "../db/schema.js";
 import { USD_MICRO } from "../accounting/fixed.js";
 import { applyDeposit, splitByBps } from "../accounting/actions.js";
-import { clonePools, type PoolKey } from "../accounting/pools.js";
+import {
+    LOCK_MONTHS,
+    STABLES,
+    TX_HASH,
+    clonePools,
+    type PoolKey,
+} from "../accounting/pools.js";
 import { AppError } from "../errors.js";
 import { postLedger, type LedgerLine } from "./ledger.js";
 import { loadPoolsForUpdate, savePools } from "./poolStore.js";
@@ -28,25 +34,11 @@ export const MIN_DEPOSIT_USD = 50n * USD_MICRO;
 // A deposit that goes only to the manager pool (admin bootstrap) needs 1 USD.
 export const MIN_MANAGER_DEPOSIT_USD = 1n * USD_MICRO;
 export const INTENT_TTL_MS = 24 * 60 * 60 * 1000;
-const STABLES = ["USDT", "USDC", "DAI"];
-const LOCK_MONTHS: Record<PoolKey, number> = {
-    liquid: 0,
-    lock_1m: 1,
-    lock_2m: 2,
-    lock_3m: 3,
-    manager: 0,
-};
-const TX_HASH = /^0x[a-fA-F0-9]{64}$/;
 const OPEN_FOR_MATCH = ["intent", "transfer_detected"];
 
 // 1 stablecoin = 1 USD for now. Floor.
 export const tokenToUsd = (amount: bigint, decimals: number): bigint =>
     (amount * USD_MICRO) / 10n ** BigInt(decimals);
-
-async function loadPoolKeys(tx: Tx) {
-    const { pools, ids } = await loadPoolsForUpdate(tx);
-    return { pools, ids };
-}
 
 /* ---------------------------- intents ---------------------------- */
 export interface CreateIntentInput {
@@ -136,7 +128,7 @@ export function createIntent(database: Database, i: CreateIntentInput) {
                 "bad_allocation",
             );
 
-        const { ids } = await loadPoolKeys(tx);
+        const { ids } = await loadPoolsForUpdate(tx);
         if (i.allocations.some((a) => a.poolKey === "manager")) {
             const [adm] = await tx
                 .select({ id: admins.id })

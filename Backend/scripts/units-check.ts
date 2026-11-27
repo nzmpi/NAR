@@ -69,6 +69,12 @@ ok(
         }),
     "bytecode change moves the address (pin the hash)",
 );
+// Fixed vector (cast compute-address --salt <salt> --init-code-hash
+// keccak256(code ++ salt)): any change to how the init code is built fails here.
+ok(
+    a1.toLowerCase() === "0x367cb394ecca5e8d5b52be49ceaaa3ddb8d18c3c",
+    "vault address matches the fixed test vector",
+);
 
 // Telegram initData
 const TOKEN = "123456:TEST";
