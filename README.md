@@ -1,6 +1,13 @@
 # NAR
 
+[![CI](https://github.com/nzmpi/nar/actions/workflows/ci.yml/badge.svg)](https://github.com/nzmpi/nar/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Stablecoin deposit vaults, a ledger, and settlement and withdrawal workflows for a private group. Members use a Telegram Mini App and bot; admins use a web dashboard.
+
+**Try it:** open [@Nar_MiniApp](https://t.me/Nar_MiniApp) in Telegram. Until an admin approves your access request you see a mock Mini App with sample data, so you can click through deposit, withdraw and history without an account or any funds.
+
+> **Testnet only.** It runs on Base Sepolia and Arbitrum Sepolia with test USDC. The contracts and backend are not audited. Do not use real funds. Returns shown in the app are projections, not guarantees.
 
 ## What it does
 
@@ -22,6 +29,15 @@ Stablecoin deposit vaults, a ledger, and settlement and withdrawal workflows for
 All numbers in the screenshots are sample data.
 
 Full spec: [`project-context.json`](project-context.json).
+
+## Design decisions
+
+- **One vault address on every chain.** Vaults are deployed through a factory with CREATE2, so a member's deposit address is derived from their ID and the exact Vault bytecode. `VAULT_CREATION_CODE_HASH` pins that bytecode, so a rebuild cannot silently change addresses.
+- **Shares, not balances.** Each pool tracks shares against its value. A settlement only changes the pool value, so thousands of positions update without being rewritten. Profit above a lot's yearly APY cap goes mostly to the manager pool.
+- **Preview before confirm.** Settlement Review runs the same code as Confirm, so the admin sees exactly what will be recorded.
+- **Admin behind a proxy.** The dashboard's Vercel middleware adds a shared secret and the visitor's IP. The API hides `/admin` without the secret, and sessions only work from the IP and browser that logged in. Logout revokes the session at once.
+- **Additive migrations only.** The old container keeps serving during a migration, and rollback is "set the previous image tag". Backups run daily to object storage, with a dead-man's-switch alert.
+- **Chains are scanned on demand.** Free RPC plans limit `eth_getLogs`, so "Check vaults" reads balances with Multicall3 first and fetches logs only for vaults that hold tokens.
 
 ## Layout
 
@@ -96,7 +112,7 @@ npm ci
 npm run dev            # http://localhost:5174
 ```
 
-Login uses Telegram Login. The backend's `ADMIN_ORIGIN` must match the Admin URL, and only the owner and added admins can sign in.
+On Vercel, set `ADMIN_PROXY_SECRET` and `BACKEND_URL` (see `deploy/RUNBOOK.md`). Login uses Telegram Login. The backend's `ADMIN_ORIGIN` must match the Admin URL, and only the owner and added admins can sign in.
 
 ## CI
 

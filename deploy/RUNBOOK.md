@@ -7,8 +7,8 @@ All commands run in `deploy/` on the server. `DATABASE_URL` in `.env` is the Neo
 1. Oracle console, the instance's VCN security list: add ingress TCP 80, TCP 443 and UDP 443 from `0.0.0.0/0`. Keep 22.
 2. On the server, run the base setup (updates, 2 GB swap, key-only SSH, host firewall, Docker). It is safe to re-run.
    ```bash
-   scp deploy/server-setup.sh ubuntu@nzmpi.duckdns.org:
-   ssh ubuntu@nzmpi.duckdns.org 'sudo bash server-setup.sh'
+   scp deploy/server-setup.sh ubuntu@<DOMAIN>:
+   ssh ubuntu@<DOMAIN> 'sudo bash server-setup.sh'
    ```
 3. Log out and back in, then `docker ps` works without sudo.
 
@@ -17,7 +17,7 @@ All commands run in `deploy/` on the server. `DATABASE_URL` in `.env` is the Neo
 The Admin site on Vercel proxies `/admin/*` to the API through `Admin/middleware.ts`. The middleware adds a shared secret and the visitor's IP. The API refuses `/admin` requests without the secret (404), and admin sessions only work from the IP and browser that logged in.
 
 1. Make a secret: `openssl rand -hex 32`.
-2. Vercel → Admin project → Settings → Environment Variables: add `ADMIN_PROXY_SECRET` with that value (Production). Redeploy the Admin project.
+2. Vercel → Admin project → Settings → Environment Variables: add `ADMIN_PROXY_SECRET` with that value and `BACKEND_URL` (the API origin, for example `https://<DOMAIN>`, no trailing slash) (Production). Redeploy the Admin project.
 3. Server: add the same `ADMIN_PROXY_SECRET=` line to `deploy/.env`, then deploy the backend as below. With `APP_ENV=prod` the backend does not start without it.
 
 Rotate it the same way. Existing admin sessions stay valid. Admin is down between steps 2 and 3, so do them back to back.
