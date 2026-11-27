@@ -21,7 +21,7 @@ Stablecoin deposit vaults, a ledger, and settlement and withdrawal workflows for
 
 All numbers in the screenshots are sample data.
 
-Full spec: [`project-context.json`](project-context.json). Roadmap: [`NEXT_STEPS.md`](NEXT_STEPS.md).
+Full spec: [`project-context.json`](project-context.json).
 
 ## Layout
 
