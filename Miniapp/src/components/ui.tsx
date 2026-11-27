@@ -205,6 +205,7 @@ const STATUS: Record<string, [string, Tone]> = {
     expired: ["Expired", "muted"],
     cancelled: ["Cancelled", "muted"],
     pending: ["Pending review", "warn"],
+    awaiting_user: ["Needs your OK", "warn"],
     paid: ["Paid", "good"],
     applied: ["Applied", "good"],
     failed: ["Failed", "bad"],

@@ -124,6 +124,9 @@ export interface WithdrawalRow {
     rejectionReason: string | null;
     txHash: string | null;
     lockedAt: string | null;
+    // Set when prices fell over 1% before payout: the user must accept or cancel.
+    awaitingUserAt: string | null;
+    withdrawAll: boolean;
     processedAt: string | null;
     createdAt: string;
 }

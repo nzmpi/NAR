@@ -47,6 +47,8 @@ export interface AdminWithdrawal {
         rejectionReason: string | null;
         txHash: string | null;
         lockedAt: string | null;
+        awaitingUserAt: string | null;
+        withdrawAll: boolean;
         createdAt: string;
     };
     telegramId: string;

@@ -191,6 +191,8 @@ export function Withdraw() {
         assetId: asset!.assetId,
         destinationAddress: dest.trim(),
         amountUsd: amountMicro!.toString(),
+        // Max (within the cent Max rounds off): the payout follows the price at lock.
+        withdrawAll: amountMicro! + 10_000n > liquid + lockedTotal || undefined,
         lockSelections: lockLots
             .filter((l) => selMicro(l) > 0n && remainder > 0n)
             .map((l) =>
@@ -256,9 +258,9 @@ export function Withdraw() {
                             </span>
                         </div>
                         <p className="text-xs text-[var(--hint)]">
-                            Final amounts use the pool price when the payment is
-                            made and can differ slightly. The fee is fixed at
-                            the time you confirm.
+                            {body().withdrawAll
+                                ? "You are withdrawing everything, so the amount is set at the pool price when an admin locks the payout and can be higher or lower."
+                                : "If prices fall before an admin locks the payout, a little more of your balance is used so you still get this amount. If that is not enough, it can be up to 1% lower without asking you; anything lower, we ask you first."}
                         </p>
                     </Card>
                     <Button

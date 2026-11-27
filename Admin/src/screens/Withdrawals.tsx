@@ -69,9 +69,10 @@ export function Withdrawals() {
 function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
     const qc = useQueryClient();
     const w = r.withdrawal;
-    const [mode, setMode] = useState<"" | "pay" | "reject">("");
+    const [mode, setMode] = useState<"" | "lock" | "pay" | "reject">("");
     const [hash, setHash] = useState("");
     const [total, setTotal] = useState("");
+    const [checked, setChecked] = useState(false);
     const [reason, setReason] = useState("");
 
     const done = () => {
@@ -80,15 +81,17 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
             qc.invalidateQueries({ queryKey: [k] });
     };
     const total6 = parseUnits(total, 6);
+    const prev = nav ? BigInt(nav) : 0n;
+    const move = total6 === null ? 0n : total6 - prev;
+    // Same 10% rule as the server's settlement check.
+    const big =
+        prev > 0n && (move < 0n ? -move : move) * 10_000n > prev * 1_000n;
     const pay = useAction({
         mutationFn: (_, key) =>
             api("/admin/withdrawals/" + w.id + "/paid", {
                 method: "POST",
                 key,
-                body: {
-                    txHash: hash.trim(),
-                    reportedTotalUsd: total6!.toString(),
-                },
+                body: { txHash: hash.trim() },
             }),
         onSuccess: done,
     });
@@ -97,6 +100,10 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
             api("/admin/withdrawals/" + w.id + "/lock", {
                 method: "POST",
                 key,
+                body: {
+                    reportedTotalUsd: total6!.toString(),
+                    confirmLargeMove: checked || undefined,
+                },
             }),
         onSuccess: done,
     });
@@ -137,7 +144,9 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
                     <dd>${fmtUsd(w.earlyFeeUsd)}</dd>
                 </div>
                 <div>
-                    <dt className="text-xs text-[var(--hint)]">Net (quoted)</dt>
+                    <dt className="text-xs text-[var(--hint)]">
+                        {w.lockedAt ? "Net (fixed)" : "Net (quoted)"}
+                    </dt>
                     <dd className="font-semibold">${fmtUsd(w.netPayoutUsd)}</dd>
                 </div>
                 <div>
@@ -163,15 +172,23 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
                 </div>
             )}
 
-            {w.status === "pending" && w.lockedAt && (
+            {w.status === "pending" && w.awaitingUserAt && (
                 <Hint>
-                    Locked: the user can no longer cancel. Send the funds, then
-                    mark it paid.
+                    Prices fell and the user's balance could not cover the gap,
+                    so the payout above is more than 1% below what they asked.
+                    Waiting for the user to accept or cancel; Mark paid stays
+                    blocked until then.
+                </Hint>
+            )}
+            {w.status === "pending" && w.lockedAt && !w.awaitingUserAt && (
+                <Hint>
+                    Locked: the amounts are fixed and the user can no longer
+                    cancel. Send exactly the amount above, then mark it paid.
                 </Hint>
             )}
             {w.status === "pending" && mode === "" && (
                 <div className="flex flex-wrap gap-2">
-                    {w.lockedAt ? (
+                    {!w.lockedAt ? (
                         <Button
                             onClick={() => {
                                 // Prefill from the total now, not from when the card first rendered (#69).
@@ -183,31 +200,82 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
                                           )
                                         : "",
                                 );
-                                setMode("pay");
+                                setChecked(false);
+                                setMode("lock");
                             }}
                         >
-                            Mark paid…
+                            Lock for payout…
                         </Button>
                     ) : (
-                        <Button
-                            disabled={lock.isPending}
-                            onClick={() => lock.mutate()}
-                        >
-                            Lock for payout
-                        </Button>
+                        !w.awaitingUserAt && (
+                            <Button onClick={() => setMode("pay")}>
+                                Mark paid…
+                            </Button>
+                        )
                     )}
                     <Button variant="danger" onClick={() => setMode("reject")}>
                         Reject…
                     </Button>
                 </div>
             )}
-            <ErrorText error={lock.error} />
+            {mode === "lock" && (
+                <div className="space-y-3 rounded-xl border border-[var(--line)] bg-[var(--bg)] p-4">
+                    <Hint>
+                        Locking settles the fund at this total, then fixes the
+                        amount to send. If prices fell, more of the user's
+                        balance is used to pay the full amount; if the payout
+                        still comes out more than 1% short, the user must accept
+                        it first.
+                    </Hint>
+                    <label className="block text-sm">
+                        Total managed funds now (USD), counting this payout as
+                        still managed
+                        <Input
+                            inputMode="decimal"
+                            value={total}
+                            onChange={(e) => {
+                                setTotal(e.target.value);
+                                setChecked(false);
+                            }}
+                            className="tnum mt-1"
+                        />
+                    </label>
+                    {big && (
+                        <label className="flex items-center gap-2.5 rounded-xl bg-[var(--warn-soft)] px-3.5 py-3 text-sm font-medium text-[var(--warn)]">
+                            <input
+                                type="checkbox"
+                                className="h-[18px] w-[18px]"
+                                checked={checked}
+                                onChange={(e) => setChecked(e.target.checked)}
+                            />
+                            Change is over 10%. I have double-checked the
+                            number.
+                        </label>
+                    )}
+                    <ErrorText error={lock.error} />
+                    <div className="flex gap-2">
+                        <Button
+                            disabled={
+                                total6 === null ||
+                                total6 <= 0n ||
+                                (big && !checked) ||
+                                lock.isPending
+                            }
+                            onClick={() => lock.mutate()}
+                        >
+                            {lock.isPending ? "Locking…" : "Lock"}
+                        </Button>
+                        <Button variant="ghost" onClick={() => setMode("")}>
+                            Cancel
+                        </Button>
+                    </div>
+                </div>
+            )}
             {mode === "pay" && (
                 <div className="space-y-3 rounded-xl border border-[var(--line)] bg-[var(--bg)] p-4">
                     <Hint>
-                        Send the funds first, then enter the transaction hash.
-                        Final amounts use the settled pool price, so the paid
-                        net can differ slightly from the quote.
+                        Send exactly {payout} first, then enter the transaction
+                        hash. The amounts were fixed at lock and do not change.
                     </Hint>
                     <Input
                         placeholder="Payment tx hash 0x…"
@@ -215,22 +283,11 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
                         onChange={(e) => setHash(e.target.value)}
                         className="font-mono"
                     />
-                    <label className="block text-sm">
-                        Total managed funds now (USD), counting this payout as
-                        still managed
-                        <Input
-                            inputMode="decimal"
-                            value={total}
-                            onChange={(e) => setTotal(e.target.value)}
-                            className="tnum mt-1"
-                        />
-                    </label>
                     <ErrorText error={pay.error} />
                     <div className="flex gap-2">
                         <Button
                             disabled={
                                 !/^0x[a-fA-F0-9]{64}$/.test(hash.trim()) ||
-                                total6 === null ||
                                 pay.isPending
                             }
                             onClick={() => pay.mutate()}

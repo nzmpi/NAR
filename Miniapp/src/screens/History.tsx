@@ -26,6 +26,8 @@ interface Item {
     problem?: string; // rejection or failure reason
     details: (readonly [string, ReactNode])[]; // shown in the popup
     cancel?: { label: string; run: (done: () => void) => void };
+    // A question for the user, with a button that answers yes.
+    ask?: { text: string; label: string; run: (done: () => void) => void };
 }
 
 const FILTERS = [
@@ -97,6 +99,11 @@ export function History() {
             api(`/me/withdrawals/${id}/cancel`, { method: "POST" }),
         onSuccess: refresh,
     });
+    const confirmW = useMutation({
+        mutationFn: (id: string) =>
+            api(`/me/withdrawals/${id}/confirm`, { method: "POST" }),
+        onSuccess: refresh,
+    });
     const cancelR = useMutation({
         mutationFn: (id: string) =>
             api(`/me/relocks/${id}/cancel`, { method: "POST" }),
@@ -131,7 +138,7 @@ export function History() {
             </div>
         );
 
-    const busy = cancelW.isPending || cancelR.isPending;
+    const busy = cancelW.isPending || cancelR.isPending || confirmW.isPending;
     const items: Item[] = [
         ...deposits
             .data!.filter(
@@ -188,12 +195,17 @@ export function History() {
                 t: w.createdAt,
                 kind: "withdrawal",
                 title: "Withdrawal",
-                status: w.status,
+                status:
+                    w.status === "pending" && w.awaitingUserAt
+                        ? "awaiting_user"
+                        : w.status,
                 amount: `−$${fmtUsd(w.grossAmountUsd)}`,
                 note:
                     BigInt(w.earlyFeeUsd) > 0n
                         ? `fee $${fmtUsd(w.earlyFeeUsd)}`
-                        : w.status === "pending" && w.lockedAt
+                        : w.status === "pending" &&
+                            w.lockedAt &&
+                            !w.awaitingUserAt
                           ? "payout in progress"
                           : undefined,
                 problem:
@@ -218,9 +230,20 @@ export function History() {
                         ? [["Transaction", <Mono>{w.txHash}</Mono>] as const]
                         : []),
                 ],
-                // Once the payout is locked it can no longer be cancelled.
+                ask:
+                    w.status === "pending" && w.awaitingUserAt
+                        ? {
+                              text: `Prices fell since your request and your balance doesn't cover the full amount, so you would now receive $${fmtUsd(w.netPayoutUsd)}. Accept the new amount, or cancel and your funds go back to your positions.`,
+                              label: `Accept $${fmtUsd(w.netPayoutUsd)}`,
+                              run: (done) =>
+                                  confirmW.mutate(w.id, { onSuccess: done }),
+                          }
+                        : undefined,
+                // Once the payout is locked it can no longer be cancelled,
+                // unless the user is being asked to accept new terms.
                 cancel:
-                    w.status === "pending" && !w.lockedAt
+                    w.status === "pending" &&
+                    (!w.lockedAt || !!w.awaitingUserAt)
                         ? {
                               label: "Cancel withdrawal",
                               run: (done) =>
@@ -301,7 +324,7 @@ export function History() {
                 <Details
                     item={open}
                     busy={busy}
-                    error={cancelW.error || cancelR.error}
+                    error={cancelW.error || cancelR.error || confirmW.error}
                     onClose={() => setOpenKey(null)}
                 />
             )}
@@ -325,6 +348,7 @@ export function History() {
                                         // Cancel errors belong to the sheet they happened in.
                                         cancelW.reset();
                                         cancelR.reset();
+                                        confirmW.reset();
                                         setOpenKey(it.key);
                                     }}
                                     className={`flex w-full cursor-pointer items-center gap-3 px-4 py-3.5 text-left active:bg-[var(--row)] ${k ? "border-t border-[var(--row)]" : ""}`}
@@ -371,7 +395,7 @@ export function History() {
                                         >
                                             {label}
                                         </span>
-                                        {it.cancel && (
+                                        {it.cancel && !it.ask && (
                                             <span className="text-xs text-[var(--hint)]">
                                                 Can be cancelled
                                             </span>
@@ -442,7 +466,20 @@ function Details({
                         </div>
                     ))}
                 </dl>
+                {item.ask && (
+                    <p className="rounded-xl bg-[var(--warn-soft)] px-3 py-2 text-sm font-medium text-[var(--warn)]">
+                        {item.ask.text}
+                    </p>
+                )}
                 <ErrorText error={error} />
+                {item.ask && (
+                    <Button
+                        disabled={busy}
+                        onClick={() => item.ask!.run(onClose)}
+                    >
+                        {item.ask.label}
+                    </Button>
+                )}
                 {item.cancel && (
                     <Button
                         variant="danger"
