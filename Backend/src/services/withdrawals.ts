@@ -529,8 +529,9 @@ export function confirmWithdrawal(
 // Admin locks before sending anything. Settles first (operator-entered total
 // NAV), then fixes the final amounts at the new prices (lockWithdrawalLot):
 // the shares leave the pools now and the fee goes to the manager pool, so the
-// recorded payout is exactly what the admin sends. A loss above 1% waits for
-// the user to confirm. Mark paid then only records the transaction.
+// recorded payout is exactly what the admin sends. A payout more than 1% below
+// the asked amount waits for the user to confirm. Mark paid then only records
+// the transaction.
 export function lockWithdrawal(
     database: Database,
     i: {
@@ -586,16 +587,8 @@ export function lockWithdrawal(
                 .for("update");
             lots.set(a.id, lot);
         }
-        // Value of the reserved shares now vs what was asked.
         let asked = 0n,
-            reservedValue = 0n;
-        for (const a of allocs) {
-            const key = keyById.get(lots.get(a.id)!.poolId)!;
-            asked += BigInt(a.grossAmountUsd);
-            reservedValue += valueOfShares(state[key], BigInt(a.shares));
-        }
-        const awaitingUser = needsConfirmation(asked, reservedValue);
-
+            usedMoreShares = false;
         let gross = 0n,
             fee = 0n,
             net = 0n,
@@ -613,6 +606,8 @@ export function lockWithdrawal(
                 BigInt(a.earlyFeeUsd) > 0n, // early iff a fee was quoted
                 w.withdrawAll,
             );
+            asked += BigInt(a.grossAmountUsd);
+            if (f.burnShares > reserved) usedMoreShares = true;
             const burned = burn(state[key], f.burnShares);
             state[key] = burned.state;
             const toManager = burned.usd - f.netUsd; // fee + rounding dust
@@ -685,6 +680,9 @@ export function lockWithdrawal(
             lines,
         });
         await savePools(tx, settled.ids, state);
+        // Ask only when the payout itself falls more than 1% short of what was
+        // asked (too few free shares); a loss covered by them is just applied.
+        const awaitingUser = needsConfirmation(asked, gross);
 
         await tx
             .update(withdrawals)
@@ -721,6 +719,7 @@ export function lockWithdrawal(
             netUsd: net,
             quotedNetUsd: BigInt(w.netPayoutUsd),
             awaitingUser,
+            usedMoreShares,
             settlementId: settled.settlementId,
         };
     });

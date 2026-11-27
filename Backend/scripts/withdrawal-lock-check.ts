@@ -84,16 +84,28 @@ async function fresh() {
     await t.h.checkInvariants("loss <= 1%");
 }
 
-// Loss of 2%: waits for the user; confirm lets the admin pay.
+// Loss of 2% covered by free shares: same net, no confirmation.
 {
     const t = await fresh();
     const w = await t.request(500n * U);
     const r = await t.lock(w.withdrawalId, 10_780n * U);
-    ok(r.awaitingUser, "loss > 1%: waits for the user");
-    ok(r.netUsd === 500n * U, "loss > 1%: new terms keep the asked net");
+    ok(!r.awaitingUser, "covered 2% loss: no confirmation");
+    ok(r.netUsd === 500n * U, "covered 2% loss: asked net paid");
+    ok(r.usedMoreShares, "covered 2% loss: user told more shares were used");
+    await t.paid(w.withdrawalId);
+    await t.h.checkInvariants("covered loss");
+}
+
+// Payout 2% short (no free shares): waits; confirm lets the admin pay.
+{
+    const t = await fresh();
+    const w = await t.request(1_000n * U);
+    const r = await t.lock(w.withdrawalId, 10_780n * U);
+    ok(r.awaitingUser, "payout > 1% short: waits for the user");
+    ok(near(r.netUsd, 980n * U), "payout > 1% short: new net 980");
     await rejects(
         t.paid(w.withdrawalId),
-        "loss > 1%: cannot mark paid before the user confirms",
+        "cannot mark paid before the user confirms",
     );
     await confirmWithdrawal(t.h.db, {
         withdrawalId: w.withdrawalId,
@@ -101,13 +113,13 @@ async function fresh() {
     });
     await t.paid(w.withdrawalId);
     ok((await t.row(w.withdrawalId)).status === "paid", "confirmed then paid");
-    await t.h.checkInvariants("loss > 1% confirm");
+    await t.h.checkInvariants("short confirm");
 }
 
-// Loss of 2%: the user declines; the locked funds go back to the lot.
+// Payout 2% short: the user declines; the locked funds go back to the lot.
 {
     const t = await fresh();
-    const w = await t.request(500n * U);
+    const w = await t.request(1_000n * U);
     await t.lock(w.withdrawalId, 10_780n * U);
     await cancelWithdrawal(t.h.db, {
         withdrawalId: w.withdrawalId,
@@ -115,14 +127,14 @@ async function fresh() {
     });
     ok(
         (await t.row(w.withdrawalId)).status === "cancelled",
-        "loss > 1%: user declines -> cancelled",
+        "user declines -> cancelled",
     );
     ok(near(await t.aliceValue(), 980n * U), "decline returns the value");
     ok(
         (await t.h.totalNav()) === 10_780n * U,
         "decline restores the fund total",
     );
-    await t.h.checkInvariants("loss > 1% decline");
+    await t.h.checkInvariants("short decline");
 }
 
 // Loss with no free shares left: the payout shrinks.

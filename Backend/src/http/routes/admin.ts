@@ -374,6 +374,12 @@ export async function adminRoutes(app: FastifyInstance) {
                     `Your withdrawal was updated to current prices: you will receive ${fmtUsd(r.netUsd)} USD (quoted ${fmtUsd(r.quotedNetUsd)} USD).`,
                     req.log,
                 );
+            else if (r.usedMoreShares)
+                void notifyUser(
+                    r.userId,
+                    `Prices fell since your withdrawal request. To still pay the full ${fmtUsd(r.netUsd)} USD, a little more of your balance was used.`,
+                    req.log,
+                );
             return r;
         }),
     );

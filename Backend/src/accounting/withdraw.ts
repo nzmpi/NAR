@@ -53,12 +53,12 @@ export function lockWithdrawalLot(
     };
 }
 
-// Loss above this share of the asked gross needs the user's confirmation.
+// A payout more than this share below the asked gross needs the user's
+// confirmation.
 export const CONFIRM_LOSS_BPS = 100n; // 1%
 
 export const needsConfirmation = (
     askedGrossUsd: bigint,
-    reservedValueUsd: bigint,
+    paidGrossUsd: bigint,
 ) =>
-    (askedGrossUsd - reservedValueUsd) * 10_000n >
-    askedGrossUsd * CONFIRM_LOSS_BPS;
+    (askedGrossUsd - paidGrossUsd) * 10_000n > askedGrossUsd * CONFIRM_LOSS_BPS;
