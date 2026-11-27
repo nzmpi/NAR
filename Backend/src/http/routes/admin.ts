@@ -346,13 +346,35 @@ export async function adminRoutes(app: FastifyInstance) {
     app.post(
         "/admin/withdrawals/:id/lock",
         auth,
-        once(204, async (req) => {
+        once(200, async (req) => {
             const { id } = idParam.parse(req.params);
-            await lockWithdrawal(db, {
+            // The lock settles at the operator's current total, then fixes the
+            // amount to send.
+            const b = z
+                .object({
+                    reportedTotalUsd: big,
+                    confirmLargeMove: z.boolean().optional(),
+                })
+                .parse(req.body);
+            const r = await lockWithdrawal(db, {
                 withdrawalId: id,
                 adminId: req.admin!.id,
+                reportedTotalUsd: b.reportedTotalUsd,
+                confirmLargeMove: b.confirmLargeMove,
             });
-            return null;
+            if (r.awaitingUser)
+                void notifyUser(
+                    r.userId,
+                    `Prices fell since your withdrawal request. You would now receive ${fmtUsd(r.netUsd)} USD instead of ${fmtUsd(r.quotedNetUsd)} USD. Open the app to confirm or cancel.`,
+                    req.log,
+                );
+            else if (r.netUsd !== r.quotedNetUsd)
+                void notifyUser(
+                    r.userId,
+                    `Your withdrawal was updated to current prices: you will receive ${fmtUsd(r.netUsd)} USD (quoted ${fmtUsd(r.quotedNetUsd)} USD).`,
+                    req.log,
+                );
+            return r;
         }),
     );
 
@@ -388,12 +410,7 @@ export async function adminRoutes(app: FastifyInstance) {
         auth,
         once(200, async (req) => {
             const { id } = idParam.parse(req.params);
-            const b = z
-                .object({
-                    txHash,
-                    reportedTotalUsd: big,
-                })
-                .parse(req.body);
+            const b = z.object({ txHash }).parse(req.body);
             const [w] = await db
                 .select({ userId: withdrawals.userId })
                 .from(withdrawals)
@@ -402,7 +419,6 @@ export async function adminRoutes(app: FastifyInstance) {
                 withdrawalId: id,
                 adminId: req.admin!.id,
                 txHash: b.txHash,
-                reportedTotalUsd: b.reportedTotalUsd,
             });
             if (w)
                 void notifyUser(

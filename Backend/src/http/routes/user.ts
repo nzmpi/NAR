@@ -22,6 +22,7 @@ import {
 } from "../../services/depositIntents.js";
 import {
     cancelWithdrawal,
+    confirmWithdrawal,
     previewWithdrawal,
     requestWithdrawal,
 } from "../../services/withdrawals.js";
@@ -80,6 +81,8 @@ const withdrawalBody = z.object({
         )
         .max(20)
         .optional(),
+    // Withdraw everything available: the payout follows the price at lock.
+    withdrawAll: z.boolean().optional(),
 });
 
 const relockBody = z.object({
@@ -223,6 +226,13 @@ export async function userRoutes(app: FastifyInstance) {
     app.post("/me/withdrawals/:id/cancel", write, async (req, reply) => {
         const { id } = idParam.parse(req.params);
         await cancelWithdrawal(db, { withdrawalId: id, userId: req.user!.id });
+        return reply.code(204).send();
+    });
+
+    // Accept new terms after a loss above 1% at lock (cancel declines them).
+    app.post("/me/withdrawals/:id/confirm", write, async (req, reply) => {
+        const { id } = idParam.parse(req.params);
+        await confirmWithdrawal(db, { withdrawalId: id, userId: req.user!.id });
         return reply.code(204).send();
     });
 

@@ -15,7 +15,7 @@ import {
 
 const U = 1_000_000n;
 
-// Pays out a quoted withdrawal: the fee stays in the manager pool. (Test-only: production pays via markWithdrawalPaid.)
+// Pays out a quoted withdrawal: the fee stays in the manager pool. (Test-only: production pays via lockWithdrawal.)
 // Execute at payment/reservation time. Fee stays in system as manager NAV.
 function applyWithdrawal(pools: Pools, poolKey: PoolKey, q: WithdrawalQuote) {
     const p = clonePools(pools);
