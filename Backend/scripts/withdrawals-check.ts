@@ -130,8 +130,15 @@ await rejects(
 
 // Locked by the admin: the user cannot cancel, the admin can still reject
 const wl = await requestWithdrawal(db, req(alice.id, 100n * U));
-await lockWithdrawal(db, { withdrawalId: wl.withdrawalId, adminId: admin.id });
-await lockWithdrawal(db, { withdrawalId: wl.withdrawalId, adminId: admin.id });
+const lockAt = async (id: string) =>
+    lockWithdrawal(db, {
+        withdrawalId: id,
+        adminId: admin.id,
+        reportedTotalUsd: await h.totalNav(),
+        now: day(30),
+    });
+await lockAt(wl.withdrawalId);
+await rejects(lockAt(wl.withdrawalId), "cannot lock twice");
 await rejects(
     cancelWithdrawal(db, { withdrawalId: wl.withdrawalId, userId: alice.id }),
     "locked withdrawal cannot be cancelled",
@@ -172,28 +179,28 @@ await rejects(
     "reserved liquid cannot be requested twice",
 );
 
-// Pay: settle first, then burn. Pool NAV drops by the net payout only.
-// Paying needs the lock first (the member cannot cancel after it).
+// Lock settles first, then fixes and burns. Pool NAV drops by the net payout
+// only. Paying needs the lock first (the member cannot cancel after it).
 await rejects(
     markWithdrawalPaid(db, {
         withdrawalId: w2.withdrawalId,
         adminId: admin.id,
         txHash: h.hash(),
-        reportedTotalUsd: 12_400n * U,
-        confirmLargeMove: true,
-        now: day(30),
     }),
     "paid without lock refused",
 );
-await lockWithdrawal(db, { withdrawalId: w2.withdrawalId, adminId: admin.id });
+await lockWithdrawal(db, {
+    withdrawalId: w2.withdrawalId,
+    adminId: admin.id,
+    reportedTotalUsd: 12_400n * U,
+    confirmLargeMove: true,
+    now: day(30),
+});
 await rejects(
     markWithdrawalPaid(db, {
         withdrawalId: w2.withdrawalId,
         adminId: admin.id,
         txHash: "0x12",
-        reportedTotalUsd: 12_400n * U,
-        confirmLargeMove: true,
-        now: day(30),
     }),
     "bad tx hash rejected",
 );
@@ -201,13 +208,10 @@ const paid = await markWithdrawalPaid(db, {
     withdrawalId: w2.withdrawalId,
     adminId: admin.id,
     txHash: h.hash(),
-    reportedTotalUsd: 12_400n * U,
-    confirmLargeMove: true,
-    now: day(30),
 });
 ok((await status(w2.withdrawalId)) === "paid", "paid");
-ok(paid.grossUsd >= 1_100n * U, "gross at settled prices >= quote (NAV grew)");
-ok(paid.feeUsd > 0n && paid.feeUsd < 20n * U, "fee ~10% of lock portion");
+ok(paid.grossUsd === 1_100n * U, "gain: exactly the asked gross is paid");
+ok(paid.feeUsd === 10n * U, "fee 10% of the lock portion");
 ok(paid.netUsd === paid.grossUsd - paid.feeUsd, "net = gross - fee");
 ok(
     (await h.openLots(alice.id)).find((l) => l.id === lock.id)!.principal <
@@ -223,9 +227,6 @@ await rejects(
         withdrawalId: w2.withdrawalId,
         adminId: admin.id,
         txHash: h.hash(),
-        reportedTotalUsd: 12_400n * U,
-        confirmLargeMove: true,
-        now: day(31),
     }),
     "cannot pay twice",
 );

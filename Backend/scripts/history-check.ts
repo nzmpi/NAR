@@ -74,7 +74,7 @@ ok(
     "deposit does not change return",
 );
 
-// Withdrawal must not change it either: covered by the same flow mechanism (recorded by markWithdrawalPaid).
+// Withdrawal must not change it either: covered by the same flow mechanism (recorded by lockWithdrawal).
 
 // Snapshots and isolation
 const snaps = await db

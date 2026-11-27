@@ -472,6 +472,12 @@ export const withdrawals = pgTable(
         txHash: text("tx_hash"),
         // Set by the admin before sending funds; the user can no longer cancel.
         lockedAt: timestamp("locked_at", { withTimezone: true }),
+        // The user asked for everything: at lock all reserved shares are taken,
+        // so the payout follows the price both ways.
+        withdrawAll: boolean("withdraw_all").notNull().default(false),
+        // Set at lock when a loss above 1% changed the terms: the user must
+        // confirm (or cancel) before the admin can mark it paid.
+        awaitingUserAt: timestamp("awaiting_user_at", { withTimezone: true }),
         createdAt: createdAt(),
         updatedAt: updatedAt(),
     },

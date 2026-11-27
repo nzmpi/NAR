@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import {
     admins,
     assets,
@@ -6,6 +6,7 @@ import {
     chains,
     payoutAddresses,
     positionLots,
+    settlements,
     users,
     vaults,
     withdrawalAllocations,
@@ -14,13 +15,17 @@ import {
 import { isAddress } from "viem";
 import { USD_MICRO } from "../accounting/fixed.js";
 import { quoteWithdrawal } from "../accounting/actions.js";
-import { finalizeWithdrawalLot } from "../accounting/withdraw.js";
+import {
+    lockWithdrawalLot,
+    needsConfirmation,
+} from "../accounting/withdraw.js";
 import {
     LOCK_KEYS,
     STABLES,
     TX_HASH,
     burn,
     clonePools,
+    mint,
     valueOfShares,
     type LockKey,
     type PoolKey,
@@ -52,6 +57,8 @@ export interface WithdrawalRequestInput {
     // lockSelections must cover exactly the remainder.
     amountUsd: bigint;
     lockSelections?: LockSelection[];
+    // Everything available: at lock all reserved shares are paid out.
+    withdrawAll?: boolean;
     now?: Date;
 }
 
@@ -290,6 +297,7 @@ export function requestWithdrawal(
                 netPayoutUsd: q.netUsd.toString(),
                 payoutAmount: q.payoutAmount.toString(),
                 status: "pending",
+                withdrawAll: i.withdrawAll ?? false,
             })
             .returning({ id: withdrawals.id });
 
@@ -345,10 +353,114 @@ async function releaseReservation(tx: Tx, withdrawalId: string) {
             .where(eq(positionLots.id, a.positionLotId));
 }
 
-// User can cancel only while pending and not locked by the admin.
+async function requireActiveAdmin(tx: Tx, adminId: string) {
+    const [adm] = await tx
+        .select({ id: admins.id })
+        .from(admins)
+        .where(and(eq(admins.id, adminId), eq(admins.isActive, true)))
+        .limit(1);
+    if (!adm)
+        throw new AppError("Active administrator not found", 403, "forbidden");
+}
+
+type WithdrawalRow = typeof withdrawals.$inferSelect;
+
+// Undoes a lock (admin reject, or the user declining new terms): the user
+// gets the gross back as new shares in the same lots at current prices, and
+// the fee leaves the manager pool. Fund total is unchanged.
+async function returnLockedFunds(
+    tx: Tx,
+    w: WithdrawalRow,
+    adminId: string | null,
+    now: Date,
+) {
+    const { pools, ids } = await loadPoolsForUpdate(tx);
+    const keyById = new Map(
+        Object.entries(ids).map(([k, id]) => [id, k as PoolKey]),
+    );
+    const state = clonePools(pools);
+    const [last] = await tx
+        .select({ id: settlements.id })
+        .from(settlements)
+        .orderBy(desc(settlements.settledAt))
+        .limit(1);
+    const allocs = await tx
+        .select()
+        .from(withdrawalAllocations)
+        .where(eq(withdrawalAllocations.withdrawalId, w.id));
+    const lines: LedgerLine[] = [];
+    let fee = 0n,
+        net = 0n;
+    for (const a of allocs) {
+        const gross = BigInt(a.grossAmountUsd);
+        if (gross === 0n) continue;
+        const [lot] = await tx
+            .select()
+            .from(positionLots)
+            .where(eq(positionLots.id, a.positionLotId))
+            .for("update");
+        const key = keyById.get(lot.poolId)!;
+        const m = mint(state[key], gross);
+        state[key] = m.state;
+        fee += BigInt(a.earlyFeeUsd);
+        net += BigInt(a.netPayoutUsd);
+        // shortcut: principal grows by the returned gross (not the exact
+        // amount removed at lock), so displayed yield on it restarts; fine for
+        // a rare undo, store the removed principal if it matters.
+        await tx
+            .update(positionLots)
+            .set({
+                shares: sql`${positionLots.shares} + ${m.shares.toString()}::numeric`,
+                principalUsd: sql`${positionLots.principalUsd} + ${gross.toString()}::numeric`,
+                closedAt: null,
+                updatedAt: now,
+            })
+            .where(eq(positionLots.id, lot.id));
+        lines.push({
+            account: "pool_equity",
+            poolId: ids[key],
+            userId: lot.userId,
+            direction: "credit",
+            amountUsd: gross,
+        });
+        if (last)
+            await recordFlow(tx, {
+                userId: lot.userId,
+                settlementId: last.id,
+                kind: "withdrawal",
+                amountUsd: gross,
+            });
+    }
+    state.manager.assets -= fee;
+    if (fee > 0n)
+        lines.push({
+            account: "pool_equity",
+            poolId: ids.manager,
+            direction: "debit",
+            amountUsd: fee,
+        });
+    if (net > 0n)
+        lines.push({
+            account: "managed_funds",
+            direction: "debit",
+            amountUsd: net,
+        });
+    if (lines.length)
+        await postLedger(tx, {
+            type: "withdrawal_reversal",
+            referenceType: "withdrawal",
+            referenceId: w.id,
+            adminId,
+            lines,
+        });
+    await savePools(tx, ids, state);
+}
+
+// User cancels while pending and not locked, or declines the new terms of a
+// lock that is waiting for them (the locked funds go back to their lots).
 export function cancelWithdrawal(
     database: Database,
-    i: { withdrawalId: string; userId: string },
+    i: { withdrawalId: string; userId: string; now?: Date },
 ) {
     return database.transaction(async (tx) => {
         const [w] = await tx
@@ -368,128 +480,70 @@ export function cancelWithdrawal(
                 409,
                 "bad_state",
             );
-        if (w.lockedAt)
+        if (w.lockedAt && !w.awaitingUserAt)
             throw new AppError(
                 "The payout is being processed and can no longer be cancelled",
                 409,
                 "locked",
             );
-        await releaseReservation(tx, w.id);
+        const now = i.now ?? new Date();
+        if (w.lockedAt) await returnLockedFunds(tx, w, null, now);
+        else await releaseReservation(tx, w.id);
         await tx
             .update(withdrawals)
-            .set({ status: "cancelled", updatedAt: new Date() })
+            .set({ status: "cancelled", awaitingUserAt: null, updatedAt: now })
             .where(eq(withdrawals.id, w.id));
     });
 }
 
-// Admin locks a pending withdrawal before sending funds, so the user cannot
-// cancel between the payout and markWithdrawalPaid. Idempotent.
-export function lockWithdrawal(
+// User accepts the new terms of a lock that is waiting for them.
+export function confirmWithdrawal(
     database: Database,
-    i: { withdrawalId: string; adminId: string },
+    i: { withdrawalId: string; userId: string },
 ) {
     return database.transaction(async (tx) => {
         const [w] = await tx
             .select()
             .from(withdrawals)
-            .where(eq(withdrawals.id, i.withdrawalId))
+            .where(
+                and(
+                    eq(withdrawals.id, i.withdrawalId),
+                    eq(withdrawals.userId, i.userId),
+                ),
+            )
             .for("update");
         if (!w) throw new AppError("Withdrawal not found", 404, "not_found");
-        if (w.status !== "pending")
-            throw new AppError("Withdrawal is not pending", 409, "bad_state");
-        if (w.lockedAt) return;
-        const now = new Date();
-        await tx
-            .update(withdrawals)
-            .set({ lockedAt: now, updatedAt: now })
-            .where(eq(withdrawals.id, w.id));
-        await tx.insert(auditLogs).values({
-            adminId: i.adminId,
-            action: "withdrawal.locked",
-            entityType: "withdrawal",
-            entityId: w.id,
-        });
-    });
-}
-
-// Admin rejects with a user-visible reason.
-export function rejectWithdrawal(
-    database: Database,
-    i: { withdrawalId: string; adminId: string; reason: string },
-) {
-    return database.transaction(async (tx) => {
-        if (!i.reason.trim())
-            throw new AppError("A reason is required", 400, "bad_reason");
-        const [adm] = await tx
-            .select({ id: admins.id })
-            .from(admins)
-            .where(and(eq(admins.id, i.adminId), eq(admins.isActive, true)))
-            .limit(1);
-        if (!adm)
+        if (w.status !== "pending" || !w.awaitingUserAt)
             throw new AppError(
-                "Active administrator not found",
-                403,
-                "forbidden",
+                "Nothing to confirm for this withdrawal",
+                409,
+                "bad_state",
             );
-        const [w] = await tx
-            .select()
-            .from(withdrawals)
-            .where(eq(withdrawals.id, i.withdrawalId))
-            .for("update");
-        if (!w) throw new AppError("Withdrawal not found", 404, "not_found");
-        if (w.status !== "pending")
-            throw new AppError("Withdrawal is not pending", 409, "bad_state");
-        const now = new Date();
-        await releaseReservation(tx, w.id);
         await tx
             .update(withdrawals)
-            .set({
-                status: "rejected",
-                rejectionReason: i.reason,
-                reviewedByAdminId: i.adminId,
-                reviewedAt: now,
-                updatedAt: now,
-            })
+            .set({ awaitingUserAt: null, updatedAt: new Date() })
             .where(eq(withdrawals.id, w.id));
-        await tx.insert(auditLogs).values({
-            adminId: i.adminId,
-            action: "withdrawal.rejected",
-            entityType: "withdrawal",
-            entityId: w.id,
-            details: { reason: i.reason },
-        });
     });
 }
 
-// Admin records the outgoing transaction. Settles first (operator-entered
-// total NAV, counting this withdrawal's funds as still managed), then burns
-// the reserved shares, credits the fee to the manager pool and marks paid.
-export function markWithdrawalPaid(
+// Admin locks before sending anything. Settles first (operator-entered total
+// NAV), then fixes the final amounts at the new prices (lockWithdrawalLot):
+// the shares leave the pools now and the fee goes to the manager pool, so the
+// recorded payout is exactly what the admin sends. A payout more than 1% below
+// the asked amount waits for the user to confirm. Mark paid then only records
+// the transaction.
+export function lockWithdrawal(
     database: Database,
     i: {
         withdrawalId: string;
         adminId: string;
-        txHash: string;
         reportedTotalUsd: bigint;
         confirmLargeMove?: boolean;
         now?: Date;
     },
 ) {
     return database.transaction(async (tx) => {
-        if (!TX_HASH.test(i.txHash))
-            throw new AppError("Invalid transaction hash", 400, "bad_tx");
-        const [adm] = await tx
-            .select({ id: admins.id })
-            .from(admins)
-            .where(and(eq(admins.id, i.adminId), eq(admins.isActive, true)))
-            .limit(1);
-        if (!adm)
-            throw new AppError(
-                "Active administrator not found",
-                403,
-                "forbidden",
-            );
-
+        await requireActiveAdmin(tx, i.adminId);
         const [w] = await tx
             .select()
             .from(withdrawals)
@@ -498,13 +552,8 @@ export function markWithdrawalPaid(
         if (!w) throw new AppError("Withdrawal not found", 404, "not_found");
         if (w.status !== "pending")
             throw new AppError("Withdrawal is not pending", 409, "bad_state");
-        // The lock is the admin's "funds may be sent" mark; the user can no longer cancel.
-        if (!w.lockedAt)
-            throw new AppError(
-                "Lock the withdrawal before marking it paid",
-                409,
-                "not_locked",
-            );
+        if (w.lockedAt)
+            throw new AppError("Withdrawal is already locked", 409, "locked");
         const [asset] = await tx
             .select()
             .from(assets)
@@ -523,44 +572,46 @@ export function markWithdrawalPaid(
         const keyById = new Map(
             Object.entries(settled.ids).map(([k, id]) => [id, k as PoolKey]),
         );
-        let state = clonePools(settled.pools);
+        const state = clonePools(settled.pools);
 
         const allocs = await tx
             .select()
             .from(withdrawalAllocations)
             .where(eq(withdrawalAllocations.withdrawalId, w.id));
-
-        let gross = 0n,
-            fee = 0n,
-            net = 0n,
-            managerCredit = 0n;
-        const lines: LedgerLine[] = [];
+        const lots = new Map<string, typeof positionLots.$inferSelect>();
         for (const a of allocs) {
             const [lot] = await tx
                 .select()
                 .from(positionLots)
                 .where(eq(positionLots.id, a.positionLotId))
                 .for("update");
+            lots.set(a.id, lot);
+        }
+        let asked = 0n,
+            usedMoreShares = false;
+        let gross = 0n,
+            fee = 0n,
+            net = 0n,
+            managerCredit = 0n;
+        const lines: LedgerLine[] = [];
+        for (const a of allocs) {
+            const lot = lots.get(a.id)!;
             const key = keyById.get(lot.poolId)!;
-            // Fee was fixed at approval: early iff a fee was quoted then.
-            const early = BigInt(a.earlyFeeUsd) > 0n;
-
-            const f = finalizeWithdrawalLot(
+            const reserved = BigInt(a.shares);
+            const f = lockWithdrawalLot(
                 state[key],
-                BigInt(a.shares),
+                reserved,
+                BigInt(lot.shares) - BigInt(lot.reservedShares),
                 BigInt(a.grossAmountUsd),
-                early,
+                BigInt(a.earlyFeeUsd) > 0n, // early iff a fee was quoted
+                w.withdrawAll,
             );
+            asked += BigInt(a.grossAmountUsd);
+            if (f.burnShares > reserved) usedMoreShares = true;
             const burned = burn(state[key], f.burnShares);
             state[key] = burned.state;
             const toManager = burned.usd - f.netUsd; // fee + rounding dust
             state.manager.assets += toManager;
-            if (toManager > 0n && state.manager.shares === 0n)
-                throw new AppError(
-                    "Manager pool has no shares to receive the fee",
-                    409,
-                    "no_manager_pool",
-                );
 
             gross += f.grossUsd;
             fee += f.feeUsd;
@@ -593,7 +644,7 @@ export function markWithdrawalPaid(
                     ).toString(),
                     shares: newShares.toString(),
                     reservedShares: (
-                        BigInt(lot.reservedShares) - BigInt(a.shares)
+                        BigInt(lot.reservedShares) - reserved
                     ).toString(),
                     closedAt: newShares === 0n ? now : null,
                     updatedAt: now,
@@ -629,6 +680,9 @@ export function markWithdrawalPaid(
             lines,
         });
         await savePools(tx, settled.ids, state);
+        // Ask only when the payout itself falls more than 1% short of what was
+        // asked (too few free shares); a loss covered by them is just applied.
+        const awaitingUser = needsConfirmation(asked, gross);
 
         await tx
             .update(withdrawals)
@@ -637,35 +691,134 @@ export function markWithdrawalPaid(
                 earlyFeeUsd: fee.toString(),
                 netPayoutUsd: net.toString(),
                 payoutAmount: usdToToken(net, asset.decimals).toString(),
-                status: "paid",
-                txHash: i.txHash.toLowerCase(),
+                lockedAt: now,
+                awaitingUserAt: awaitingUser ? now : null,
                 reviewedByAdminId: i.adminId,
                 reviewedAt: now,
+                updatedAt: now,
+            })
+            .where(eq(withdrawals.id, w.id));
+        await tx.insert(auditLogs).values({
+            adminId: i.adminId,
+            action: "withdrawal.locked",
+            entityType: "withdrawal",
+            entityId: w.id,
+            details: {
+                grossUsd: gross.toString(),
+                feeUsd: fee.toString(),
+                netUsd: net.toString(),
+                quotedNetUsd: w.netPayoutUsd,
+                awaitingUser,
+                settlementId: settled.settlementId,
+            },
+        });
+        return {
+            userId: w.userId,
+            grossUsd: gross,
+            feeUsd: fee,
+            netUsd: net,
+            quotedNetUsd: BigInt(w.netPayoutUsd),
+            awaitingUser,
+            usedMoreShares,
+            settlementId: settled.settlementId,
+        };
+    });
+}
+
+// Admin rejects with a user-visible reason. A locked withdrawal's funds go
+// back to the user's lots.
+export function rejectWithdrawal(
+    database: Database,
+    i: { withdrawalId: string; adminId: string; reason: string; now?: Date },
+) {
+    return database.transaction(async (tx) => {
+        if (!i.reason.trim())
+            throw new AppError("A reason is required", 400, "bad_reason");
+        await requireActiveAdmin(tx, i.adminId);
+        const [w] = await tx
+            .select()
+            .from(withdrawals)
+            .where(eq(withdrawals.id, i.withdrawalId))
+            .for("update");
+        if (!w) throw new AppError("Withdrawal not found", 404, "not_found");
+        if (w.status !== "pending")
+            throw new AppError("Withdrawal is not pending", 409, "bad_state");
+        const now = i.now ?? new Date();
+        if (w.lockedAt) await returnLockedFunds(tx, w, i.adminId, now);
+        else await releaseReservation(tx, w.id);
+        await tx
+            .update(withdrawals)
+            .set({
+                status: "rejected",
+                awaitingUserAt: null,
+                rejectionReason: i.reason,
+                reviewedByAdminId: i.adminId,
+                reviewedAt: now,
+                updatedAt: now,
+            })
+            .where(eq(withdrawals.id, w.id));
+        await tx.insert(auditLogs).values({
+            adminId: i.adminId,
+            action: "withdrawal.rejected",
+            entityType: "withdrawal",
+            entityId: w.id,
+            details: { reason: i.reason },
+        });
+    });
+}
+
+// Admin records the outgoing transaction of the amount fixed at lock. Never
+// changes amounts.
+export function markWithdrawalPaid(
+    database: Database,
+    i: { withdrawalId: string; adminId: string; txHash: string; now?: Date },
+) {
+    return database.transaction(async (tx) => {
+        if (!TX_HASH.test(i.txHash))
+            throw new AppError("Invalid transaction hash", 400, "bad_tx");
+        await requireActiveAdmin(tx, i.adminId);
+        const [w] = await tx
+            .select()
+            .from(withdrawals)
+            .where(eq(withdrawals.id, i.withdrawalId))
+            .for("update");
+        if (!w) throw new AppError("Withdrawal not found", 404, "not_found");
+        if (w.status !== "pending")
+            throw new AppError("Withdrawal is not pending", 409, "bad_state");
+        if (!w.lockedAt)
+            throw new AppError(
+                "Lock the withdrawal before marking it paid",
+                409,
+                "not_locked",
+            );
+        if (w.awaitingUserAt)
+            throw new AppError(
+                "The user has not confirmed the new terms yet",
+                409,
+                "awaiting_user",
+            );
+        const now = i.now ?? new Date();
+        await tx
+            .update(withdrawals)
+            .set({
+                status: "paid",
+                txHash: i.txHash.toLowerCase(),
                 processedByAdminId: i.adminId,
                 processedAt: now,
                 updatedAt: now,
             })
             .where(eq(withdrawals.id, w.id));
-
         await tx.insert(auditLogs).values({
             adminId: i.adminId,
             action: "withdrawal.paid",
             entityType: "withdrawal",
             entityId: w.id,
-            details: {
-                txHash: i.txHash.toLowerCase(),
-                grossUsd: gross.toString(),
-                feeUsd: fee.toString(),
-                netUsd: net.toString(),
-                quotedNetUsd: w.netPayoutUsd,
-                settlementId: settled.settlementId,
-            },
+            details: { txHash: i.txHash.toLowerCase(), netUsd: w.netPayoutUsd },
         });
         return {
-            grossUsd: gross,
-            feeUsd: fee,
-            netUsd: net,
-            settlementId: settled.settlementId,
+            grossUsd: BigInt(w.grossAmountUsd),
+            feeUsd: BigInt(w.earlyFeeUsd),
+            netUsd: BigInt(w.netPayoutUsd),
         };
     });
 }

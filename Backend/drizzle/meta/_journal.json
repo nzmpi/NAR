@@ -92,6 +92,13 @@
       "when": 1795544167290,
       "tag": "0012_access_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1795779904168,
+      "tag": "0013_withdrawal_fixed_at_lock",
+      "breakpoints": true
     }
   ]
 }
