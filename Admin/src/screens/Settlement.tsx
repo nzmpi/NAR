@@ -130,6 +130,7 @@ export function Settlement({ go }: { go: (t: Tab) => void }) {
                             onChange={(e) => {
                                 setValue(e.target.value);
                                 setConfirm(false);
+                                setChecked(false);
                             }}
                             placeholder="e.g. 12500.00"
                             className="display min-w-0 flex-1 bg-transparent pl-1.5 text-[26px] font-semibold outline-none tnum"

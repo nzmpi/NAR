@@ -166,7 +166,6 @@ function DepositRow({ d, nav }: { d: AdminDeposit; nav?: string }) {
     const who = d.username ? `@${d.username}` : d.telegramId;
     const intended = `${formatUnits(i.intendedAmount, d.decimals, 2)} ${d.symbol}`;
     const canReject = [
-        "intent",
         "transfer_detected",
         "awaiting_user_approval",
         "ready_to_activate",

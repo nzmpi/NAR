@@ -86,7 +86,10 @@ function TransferRow({
 }) {
     const asset = deps.find((d) => d.intent.assetId === t.assetId);
     const candidates = deps.filter(
-        (d) => d.intent.vaultId === t.vaultId && OPEN.includes(d.intent.status),
+        (d) =>
+            d.intent.vaultId === t.vaultId &&
+            d.intent.assetId === t.assetId &&
+            OPEN.includes(d.intent.status),
     );
     const [pick, setPick] = useState("");
     const match = useAction({

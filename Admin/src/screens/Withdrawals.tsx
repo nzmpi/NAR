@@ -71,9 +71,7 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
     const w = r.withdrawal;
     const [mode, setMode] = useState<"" | "pay" | "reject">("");
     const [hash, setHash] = useState("");
-    const [total, setTotal] = useState(
-        nav ? formatUnits(nav, 6, 2).replaceAll(",", "") : "",
-    );
+    const [total, setTotal] = useState("");
     const [reason, setReason] = useState("");
 
     const done = () => {
@@ -174,7 +172,20 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
             {w.status === "pending" && mode === "" && (
                 <div className="flex flex-wrap gap-2">
                     {w.lockedAt ? (
-                        <Button onClick={() => setMode("pay")}>
+                        <Button
+                            onClick={() => {
+                                // Prefill from the total now, not from when the card first rendered (#69).
+                                setTotal(
+                                    nav
+                                        ? formatUnits(nav, 6, 2).replaceAll(
+                                              ",",
+                                              "",
+                                          )
+                                        : "",
+                                );
+                                setMode("pay");
+                            }}
+                        >
                             Mark paid…
                         </Button>
                     ) : (
