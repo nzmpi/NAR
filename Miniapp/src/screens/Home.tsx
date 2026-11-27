@@ -191,7 +191,16 @@ export function Home({
             {pending.length > 0 && (
                 <InProgress
                     title={count(pending.length, "deposit")}
-                    note={PENDING_TEXT[pending[0].status] ?? "Being confirmed"}
+                    note={
+                        PENDING_TEXT[
+                            (
+                                pending.find(
+                                    (p) =>
+                                        p.status === "awaiting_user_approval",
+                                ) ?? pending[0]
+                            ).status
+                        ] ?? "Being confirmed"
+                    }
                     onClick={() => go("deposit")}
                 />
             )}

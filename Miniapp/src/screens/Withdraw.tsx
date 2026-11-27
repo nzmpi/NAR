@@ -95,18 +95,16 @@ export function Withdraw() {
 
     const lots = pf.data!.lots;
     const manager = BigInt(pf.data!.managerAvailableUsd);
+    // A matured lock stays in its pool until the next settlement, but the
+    // server already treats it as free, like liquid.
     const liquidOnly = lots
-        .filter((l) => l.pool === "liquid")
+        .filter((l) => !isActiveLock(l))
         .reduce((s, l) => s + avail(l), 0n);
     // Fee-free now: liquid plus manager funds (admins only).
     const liquid = liquidOnly + manager;
     const lockLots = lots
-        .filter((l) => l.pool !== "liquid" && avail(l) > 0n)
-        .sort(
-            (a, b) =>
-                Number(isActiveLock(a)) - Number(isActiveLock(b)) ||
-                (a.maturesAt ?? "").localeCompare(b.maturesAt ?? ""),
-        );
+        .filter((l) => isActiveLock(l) && avail(l) > 0n)
+        .sort((a, b) => a.maturesAt!.localeCompare(b.maturesAt!));
     const lockedTotal = lockLots.reduce((s, l) => s + avail(l), 0n);
     const assetList = assets.data!;
     const asset = assetList.find(
@@ -375,14 +373,11 @@ export function Withdraw() {
                             />
                             <span className="min-w-0 flex-1">
                                 <span className="block font-semibold">
-                                    {POOL_LABEL[l.pool]} ·{" "}
-                                    {isActiveLock(l) ? "locked" : "unlocked"}
+                                    {POOL_LABEL[l.pool]} · locked
                                 </span>
                                 <span className="block text-xs text-[var(--hint)]">
                                     up to ${fmtUsd(avail(l))}
-                                    {l.maturesAt &&
-                                        isActiveLock(l) &&
-                                        ` · unlocks ${shortDate(l.maturesAt)}`}
+                                    {` · unlocks ${shortDate(l.maturesAt!)}`}
                                 </span>
                             </span>
                             <input
