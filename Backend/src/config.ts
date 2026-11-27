@@ -28,8 +28,10 @@ const schema = z.object({
     // Extra allowed browser origins (the Mini App origin), comma-separated.
     CORS_ORIGINS: z.string().default(""),
     INIT_DATA_MAX_AGE_SECONDS: z.coerce.number().int().positive().default(3600),
-    SCAN_INTERVAL_SECONDS: z.coerce.number().int().min(0).default(60), // 0 = off
-    OUTBOX_INTERVAL_SECONDS: z.coerce.number().int().min(0).default(5), // 0 = off
+    // Hourly so the free Neon compute can scale to zero between runs; messages
+    // are sent right after they are queued, this loop only retries.
+    SCAN_INTERVAL_SECONDS: z.coerce.number().int().min(0).default(3600), // 0 = off
+    OUTBOX_INTERVAL_SECONDS: z.coerce.number().int().min(0).default(3600), // 0 = off
     SCAN_LOOKBACK_BLOCKS: z.coerce.number().int().positive().default(50000),
     LOG_CHUNK_BLOCKS: z.coerce.number().int().positive().default(2000),
     REORG_OVERLAP_BLOCKS: z.coerce.number().int().min(0).default(30),

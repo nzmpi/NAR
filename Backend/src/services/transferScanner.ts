@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import {
     assets,
     chainScanState,
@@ -170,6 +170,22 @@ async function doScan(database: Database, chain: ChainRow) {
         ]),
     ];
 
+    const saveProgress = (block: bigint) =>
+        database
+            .insert(chainScanState)
+            .values({
+                chainId: chain.id,
+                lastScannedBlock: block.toString(),
+                updatedAt: new Date(),
+            })
+            .onConflictDoUpdate({
+                target: chainScanState.chainId,
+                set: {
+                    lastScannedBlock: block.toString(),
+                    updatedAt: new Date(),
+                },
+            });
+
     let found = 0;
     if (vs.length && toks.length) {
         const chunk = BigInt(config.LOG_CHUNK_BLOCKS);
@@ -185,20 +201,13 @@ async function doScan(database: Database, chain: ChainRow) {
             const rows = await ingest(database, chain, logs);
             found += rows.filter((r) => r.created).length;
             await autoMatchAll(database, rows);
+            // Keep progress per chunk: one RPC error late in a long catch-up
+            // must not throw away the chunks already scanned.
+            await saveProgress(e);
         }
     }
 
-    await database
-        .insert(chainScanState)
-        .values({
-            chainId: chain.id,
-            lastScannedBlock: head.toString(),
-            updatedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-            target: chainScanState.chainId,
-            set: { lastScannedBlock: head.toString(), updatedAt: new Date() },
-        });
+    await saveProgress(head);
     return { scanned: true, funded: vs.length, found };
 }
 
@@ -284,7 +293,23 @@ export async function checkIntent(
             503,
             "no_rpc",
         );
-    return scanChain(database, { id: r.chainUuid, chainId: r.chainId }, 10_000);
+    const scan = await scanChain(
+        database,
+        { id: r.chainUuid, chainId: r.chainId },
+        10_000,
+    );
+    // The Mini App tells the user whether their transfer was found: count the
+    // transfers now matched to this intent (the scan may have auto-matched one).
+    const matched = await database
+        .select({ id: depositTransfers.id })
+        .from(depositTransfers)
+        .where(
+            and(
+                eq(depositTransfers.intentId, intentId),
+                ne(depositTransfers.status, "rejected"),
+            ),
+        );
+    return { ...scan, attached: matched.length };
 }
 
 // Fallback when auto-detection missed it: the user gives the tx hash.

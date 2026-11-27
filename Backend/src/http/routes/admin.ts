@@ -18,7 +18,8 @@ import {
     listAccessRequests,
 } from "../../services/accessRequests.js";
 import type { Database } from "../../services/types.js";
-import { hasRpc } from "../../chain/client.js";
+import { erc20Abi } from "viem";
+import { getClient, hasRpc } from "../../chain/client.js";
 import { idempotent } from "../idempotency.js";
 import { big, evmAddress, idParam, txHash, uuid } from "../schemas.js";
 import {
@@ -39,7 +40,7 @@ import {
     markWithdrawalPaid,
     rejectWithdrawal,
 } from "../../services/withdrawals.js";
-import { fmtUsd, notifyUser } from "../../services/notify.js";
+import { fmtUsd, notifyUser, sendQueued } from "../../services/notify.js";
 import {
     adminListAudit,
     adminListDeposits,
@@ -452,6 +453,36 @@ export async function adminRoutes(app: FastifyInstance) {
                     decimals: z.number().int().min(0).max(36),
                 })
                 .parse(req.body);
+            // Wrong decimals misprice every deposit and an asset can't be
+            // edited later, so check them against the token contract.
+            const [chain] = await db
+                .select({ chainId: chains.chainId })
+                .from(chains)
+                .where(eq(chains.id, b.chainId))
+                .limit(1);
+            if (!chain) throw new AppError("Chain not found", 404, "not_found");
+            if (hasRpc(chain.chainId)) {
+                let onchain: number;
+                try {
+                    onchain = await getClient(chain.chainId).readContract({
+                        address: b.tokenAddress as `0x${string}`,
+                        abi: erc20Abi,
+                        functionName: "decimals",
+                    });
+                } catch {
+                    throw new AppError(
+                        "Could not read decimals() from that token address on this chain",
+                        400,
+                        "bad_token",
+                    );
+                }
+                if (onchain !== b.decimals)
+                    throw new AppError(
+                        `The token has ${onchain} decimals, not ${b.decimals}`,
+                        400,
+                        "bad_decimals",
+                    );
+            }
             return db.transaction(async (tx) => {
                 const [a] = await tx
                     .insert(assets)
@@ -693,6 +724,7 @@ export async function adminRoutes(app: FastifyInstance) {
                     adminId: req.admin!.id,
                     approve,
                 });
+                sendQueued(req.log);
                 return null;
             }),
         );

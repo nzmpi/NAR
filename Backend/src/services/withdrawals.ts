@@ -11,11 +11,14 @@ import {
     withdrawalAllocations,
     withdrawals,
 } from "../db/schema.js";
+import { isAddress } from "viem";
 import { USD_MICRO } from "../accounting/fixed.js";
 import { quoteWithdrawal } from "../accounting/actions.js";
 import { finalizeWithdrawalLot } from "../accounting/withdraw.js";
 import {
     LOCK_KEYS,
+    STABLES,
+    TX_HASH,
     burn,
     clonePools,
     valueOfShares,
@@ -31,9 +34,6 @@ import type { Database, Tx } from "./types.js";
 import { recordFlow } from "./history.js";
 
 export const MIN_WITHDRAWAL_USD = 5n * USD_MICRO;
-const STABLES = ["USDT", "USDC", "DAI"];
-const EVM_ADDRESS = /^0x[a-fA-F0-9]{40}$/;
-const TX_HASH = /^0x[a-fA-F0-9]{64}$/;
 
 const usdToToken = (usd: bigint, decimals: number): bigint =>
     (usd * 10n ** BigInt(decimals)) / USD_MICRO;
@@ -192,8 +192,14 @@ async function buildQuote(tx: Tx, i: WithdrawalRequestInput) {
     const now = i.now ?? new Date();
     if (i.amountUsd < MIN_WITHDRAWAL_USD)
         throw new AppError("Minimum withdrawal is 5 USD", 400, "below_minimum");
-    if (!EVM_ADDRESS.test(i.destinationAddress))
-        throw new AppError("Invalid payout address", 400, "bad_address");
+    // Strict: a mixed-case address must match its EIP-55 checksum, so a typo in
+    // a pasted checksummed address is caught (all-lowercase still passes).
+    if (!isAddress(i.destinationAddress))
+        throw new AppError(
+            "Invalid payout address (check for typos)",
+            400,
+            "bad_address",
+        );
     // The zero address and vault addresses would lose or strand the payout (the Factory is checked in the route).
     const dest = i.destinationAddress.toLowerCase();
     const [ownVault] = await tx

@@ -16,9 +16,11 @@ try {
     await app.listen({ port: config.PORT, host: config.HOST });
     startScanner(app.log);
     startOutbox(app.log);
-    await startBot(app.log);
 } catch (error) {
     app.log.error(error);
     await pool.end();
     process.exit(1);
 }
+// The bot only answers /start, /help and access requests (notifications use
+// the outbox), so a Telegram outage must not take the API down.
+startBot(app.log).catch((e) => app.log.error(e));

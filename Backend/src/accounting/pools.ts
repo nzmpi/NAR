@@ -16,6 +16,17 @@ export const POOL_KEYS: PoolKey[] = [
     "manager",
 ];
 export const LOCK_KEYS: LockKey[] = ["lock_1m", "lock_2m", "lock_3m"];
+// Lock length per pool, used by deposits and relocks alike.
+export const LOCK_MONTHS: Record<PoolKey, number> = {
+    liquid: 0,
+    lock_1m: 1,
+    lock_2m: 2,
+    lock_3m: 3,
+    manager: 0,
+};
+// Accepted tokens, valued 1 token = 1 USD.
+export const STABLES = ["USDT", "USDC", "DAI"];
+export const TX_HASH = /^0x[a-fA-F0-9]{64}$/;
 export const APY_BPS: Record<Exclude<PoolKey, "manager">, number> = {
     liquid: 600,
     lock_1m: 800,

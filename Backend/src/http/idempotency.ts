@@ -65,19 +65,10 @@ export async function idempotent(
         );
     }
 
+    let body: unknown;
     try {
         const result = await run();
-        const body = JSON.parse(JSON.stringify(result ?? null)); // bigint -> string
-        await db
-            .update(idempotencyKeys)
-            .set({ responseStatus: successStatus, responseBody: body })
-            .where(
-                and(
-                    eq(idempotencyKeys.scope, scope),
-                    eq(idempotencyKeys.key, key),
-                ),
-            );
-        return { status: successStatus, body };
+        body = JSON.parse(JSON.stringify(result ?? null)); // bigint -> string
     } catch (e) {
         await db
             .delete(idempotencyKeys)
@@ -89,4 +80,13 @@ export async function idempotent(
             );
         throw e;
     }
+    // Outside the try: the action has committed. If saving the response fails,
+    // the key stays "in progress" so a retry can't run the action again.
+    await db
+        .update(idempotencyKeys)
+        .set({ responseStatus: successStatus, responseBody: body })
+        .where(
+            and(eq(idempotencyKeys.scope, scope), eq(idempotencyKeys.key, key)),
+        );
+    return { status: successStatus, body };
 }

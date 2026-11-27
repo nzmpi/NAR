@@ -163,9 +163,11 @@ export async function startBot(log: Log) {
         log.info(`bot webhook set: ${config.WEBHOOK_URL}`);
     } else {
         // start() removes any webhook first. Not awaited: it runs until stopped.
-        void b.start({
+        // A rejection (e.g. 409: another instance polls with this token) must
+        // not crash the process.
+        b.start({
             allowed_updates: ["message", "callback_query"],
             onStart: (me) => log.info(`bot polling as @${me.username}`),
-        });
+        }).catch((e) => log.error(e));
     }
 }

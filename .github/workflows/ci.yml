@@ -66,6 +66,8 @@ jobs:
 
   # Builds on every PR; pushes to GHCR only on main. The 1 GB server just pulls.
   backend-image:
+    # Never publish an image for a commit whose tests fail.
+    needs: [backend, contracts]
     runs-on: ubuntu-latest
     permissions:
       contents: read

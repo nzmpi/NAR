@@ -15,3 +15,6 @@ trap 'rm -f "$f"' EXIT
 docker run --rm postgres:18 pg_dump "$DATABASE_URL" -Fc > "$f"
 curl -fsS --retry 3 -T "$f" "$BACKUP_PAR_URL$f"
 echo "$(date -u +%FT%TZ) uploaded $f ($(wc -c < "$f") bytes)"
+# Dead man's switch: the monitor alerts when these pings stop (for example an
+# expired PAR makes every upload fail).
+if [ -n "${BACKUP_PING_URL:-}" ]; then curl -fsS --retry 3 "$BACKUP_PING_URL" > /dev/null; fi

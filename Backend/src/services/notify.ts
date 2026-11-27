@@ -1,5 +1,5 @@
 import { db } from "../db/index.js";
-import { enqueueNotification } from "./outbox.js";
+import { drainOutbox, enqueueNotification } from "./outbox.js";
 
 type Log = { error: (...a: unknown[]) => void };
 
@@ -10,12 +10,20 @@ export function fmtUsd(micro: bigint): string {
     return `${whole.toString()}.${cents.toString().padStart(2, "0")}`;
 }
 
-// Queues the message; the outbox worker delivers it with retries.
-// A failed enqueue never fails the money operation.
+// Queues the message and sends it now; the hourly outbox worker retries
+// failures. A failed enqueue never fails the money operation.
 export async function notifyUser(userId: string, text: string, log: Log) {
     try {
         await enqueueNotification(db, userId, text);
     } catch (e) {
         log.error(e);
+        return;
     }
+    sendQueued(log);
+}
+
+// Delivers queued messages without waiting for the worker, which runs hourly
+// so the free Neon compute can sleep.
+export function sendQueued(log: Log) {
+    void drainOutbox(log).catch((e) => log.error(e));
 }

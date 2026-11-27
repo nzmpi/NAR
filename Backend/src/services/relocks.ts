@@ -12,6 +12,7 @@ import {
     clonePools,
     sharesForWithdrawal,
     LOCK_KEYS,
+    LOCK_MONTHS,
     type LockKey,
     type PoolKey,
     type Pools,
@@ -21,14 +22,6 @@ import { postLedger } from "./ledger.js";
 import { loadPoolsForUpdate, type PoolIds } from "./poolStore.js";
 import { addMonths } from "./time.js";
 import type { Database, Tx } from "./types.js";
-
-const LOCK_MONTHS: Record<PoolKey, number> = {
-    liquid: 0,
-    lock_1m: 1,
-    lock_2m: 2,
-    lock_3m: 3,
-    manager: 0,
-};
 
 export interface RelockItemInput {
     lotId: string;

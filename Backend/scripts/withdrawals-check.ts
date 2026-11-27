@@ -71,6 +71,19 @@ await rejects(
     requestWithdrawal(db, req(alice.id, 100n * U, {}, "0x123")),
     "bad destination address rejected",
 );
+// EIP-55 example address with its last letter's case flipped: a typo.
+await rejects(
+    requestWithdrawal(
+        db,
+        req(
+            alice.id,
+            100n * U,
+            {},
+            "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD",
+        ),
+    ),
+    "address with a bad checksum rejected",
+);
 await rejects(
     requestWithdrawal(db, req(alice.id, 1_500n * U)),
     "over liquid balance without lock selection rejected",

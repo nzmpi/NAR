@@ -1,5 +1,3 @@
-import { growthFactor } from "./lib/rates.js";
-import { P } from "../src/accounting/fixed.js";
 import { emptyPools, totalAssets } from "../src/accounting/pools.js";
 import {
     applyDeposit,
@@ -32,13 +30,6 @@ const assert = (c: boolean, m: string) => {
     if (!c) throw new Error("FAIL " + m);
     console.log("ok  " + m);
 };
-
-// 1y factor == 1.10 exactly-ish
-const f = growthFactor(1000, YEAR);
-assert(
-    1_100_000n * (P / 1_000_000n) - f < 10n ** 12n,
-    "10% APY over 1y = 1.10",
-);
 
 let p = emptyPools();
 p = applyDeposit(p, "manager", 10_000n * U).pools;

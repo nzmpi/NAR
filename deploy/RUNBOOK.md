@@ -75,7 +75,8 @@ Neon's free-tier restore window is short, so `backup.sh` keeps our own copies.
 2. Create a pre-authenticated request on the bucket: "Permit object writes", no listing, long expiry. Put its URL (ends in `/o/`) in `.env` as `BACKUP_PAR_URL`. Note the expiry date; renew it before then.
 3. Run `./backup.sh` once by hand and check the object in the bucket.
 4. Add the cron line from the top of `backup.sh`.
-5. Test a restore: download one dump from the console and restore it into a scratch Neon branch with the command above.
+5. Create a free daily check at a dead-man's-switch service (for example healthchecks.io: period 1 day, grace 2 hours). Put its ping URL in `.env` as `BACKUP_PING_URL`. `backup.sh` pings it only after a successful upload, so you get an alert when backups stop, for example when the PAR expires.
+6. Test a restore: download one dump from the console and restore it into a scratch Neon branch with the command above.
 
 ## Rules once the DB holds funds
 
@@ -88,9 +89,11 @@ Neon's free-tier restore window is short, so `backup.sh` keeps our own copies.
 
 `GET /health/ready` returns 200 when all is well. It returns 503 when the DB is unreachable, or when the intent-expiry loop (`scanner`) or the notification outbox has had no good run for 5 intervals (at least 10 minutes). Chains are no longer scanned on a timer: press **Check vaults** on the Admin Deposits screen. It reads every vault's token balance and fetches transfer logs only for vaults that hold tokens. The JSON body says which part failed. Loops turned off (interval `0`) show `off` and do not fail the check.
 
+Point the uptime monitor at `GET /health`, not `/health/ready`. `/health` answers without touching the database. `/health/ready` runs a query, and polling it every few minutes keeps the free Neon compute awake, which uses up the monthly compute hours. Open `/health/ready` by hand when you need the details.
+
 Set up a free external uptime monitor (for example UptimeRobot):
 
-1. HTTP(S) monitor on `https://<DOMAIN>/health/ready`, every 5 minutes.
+1. HTTP(S) monitor on `https://<DOMAIN>/health`, every 5 minutes.
 2. Alert contact: email, or Telegram if the service supports it.
 3. Stop the backend container once and confirm the alert arrives.
 
