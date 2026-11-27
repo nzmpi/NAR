@@ -233,7 +233,7 @@ export function History() {
                 ask:
                     w.status === "pending" && w.awaitingUserAt
                         ? {
-                              text: `Prices fell more than 1% since your request, so you would now receive $${fmtUsd(w.netPayoutUsd)}. Accept the new amount, or cancel and your funds go back to your positions.`,
+                              text: `Prices fell since your request and your balance doesn't cover the full amount, so you would now receive $${fmtUsd(w.netPayoutUsd)}. Accept the new amount, or cancel and your funds go back to your positions.`,
                               label: `Accept $${fmtUsd(w.netPayoutUsd)}`,
                               run: (done) =>
                                   confirmW.mutate(w.id, { onSuccess: done }),

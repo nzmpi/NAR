@@ -174,9 +174,10 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
 
             {w.status === "pending" && w.awaitingUserAt && (
                 <Hint>
-                    Prices fell more than 1% since the request, so the amounts
-                    above are lower than quoted. Waiting for the user to accept
-                    or cancel; Mark paid stays blocked until then.
+                    Prices fell and the user's balance could not cover the gap,
+                    so the payout above is more than 1% below what they asked.
+                    Waiting for the user to accept or cancel; Mark paid stays
+                    blocked until then.
                 </Hint>
             )}
             {w.status === "pending" && w.lockedAt && !w.awaitingUserAt && (
@@ -221,8 +222,10 @@ function Row({ r, nav }: { r: AdminWithdrawal; nav?: string }) {
                 <div className="space-y-3 rounded-xl border border-[var(--line)] bg-[var(--bg)] p-4">
                     <Hint>
                         Locking settles the fund at this total, then fixes the
-                        amount to send. If prices fell more than 1% since the
-                        request, the user must accept the lower amount first.
+                        amount to send. If prices fell, more of the user's
+                        balance is used to pay the full amount; if the payout
+                        still comes out more than 1% short, the user must accept
+                        it first.
                     </Hint>
                     <label className="block text-sm">
                         Total managed funds now (USD), counting this payout as

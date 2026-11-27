@@ -260,7 +260,7 @@ export function Withdraw() {
                         <p className="text-xs text-[var(--hint)]">
                             {body().withdrawAll
                                 ? "You are withdrawing everything, so the amount is set at the pool price when an admin locks the payout and can be higher or lower."
-                                : "The amount is set at the pool price when an admin locks the payout. It can be up to 1% lower without asking you; if prices fall more, we ask you first."}
+                                : "If prices fall before an admin locks the payout, a little more of your balance is used so you still get this amount. If that is not enough, it can be up to 1% lower without asking you; anything lower, we ask you first."}
                         </p>
                     </Card>
                     <Button
