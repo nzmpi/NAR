@@ -33,7 +33,7 @@ Full spec: [`project-context.json`](project-context.json).
 ## Design decisions
 
 - **One vault address on every chain.** Vaults are deployed through a factory with CREATE2, so a member's deposit address is derived from their ID and the exact Vault bytecode. `VAULT_CREATION_CODE_HASH` pins that bytecode, so a rebuild cannot silently change addresses.
-- **Shares, not balances.** Each pool tracks shares against its value. A settlement only changes the pool value, so thousands of positions update without being rewritten. Profit above a lot's yearly APY cap goes mostly to the manager pool.
+- **Shares, not balances.** Each pool tracks shares against its value. A settlement mints each lot's yield as new shares, up to its APY cap, which opens week by week. Most profit above the cap goes to the manager pool.
 - **Preview before confirm.** Settlement Review runs the same code as Confirm, so the admin sees exactly what will be recorded.
 - **Admin behind a proxy.** The dashboard's Vercel middleware adds a shared secret and the visitor's IP. The API hides `/admin` without the secret, and sessions only work from the IP and browser that logged in. Logout revokes the session at once.
 - **Additive migrations only.** The old container keeps serving during a migration, and rollback is "set the previous image tag". Backups run daily to object storage, with a dead-man's-switch alert.

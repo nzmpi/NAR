@@ -9,8 +9,8 @@ declare const process: { env: Record<string, string | undefined> };
 
 export default async function middleware(request: Request) {
     const secret = process.env.ADMIN_PROXY_SECRET;
-    // Backend origin, no trailing slash (a Vercel env var, like the secret).
-    const backend = process.env.BACKEND_URL;
+    // Backend origin, a trailing slash is trimmed (a Vercel env var, like the secret).
+    const backend = process.env.BACKEND_URL?.replace(/\/+$/, "");
     if (!secret || !backend)
         return new Response("Admin proxy not configured", { status: 500 });
 
