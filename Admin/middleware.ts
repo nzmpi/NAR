@@ -1,17 +1,17 @@
 // Vercel Routing Middleware: proxies /admin/* (API calls and the OIDC
 // callback) to the backend so the browser sees one site and the SameSite=Lax
 // cookie works. It adds ADMIN_PROXY_SECRET (a Vercel env var, never in git)
-// and the visitor's IP; the backend refuses /admin requests without the
+// and the visitor's IP, and sends them to BACKEND_URL; the backend refuses /admin requests without the
 // secret and binds sessions to that IP.
 export const config = { matcher: "/admin/:path*" };
-
-const BACKEND = "https://nzmpi.duckdns.org";
 
 declare const process: { env: Record<string, string | undefined> };
 
 export default async function middleware(request: Request) {
     const secret = process.env.ADMIN_PROXY_SECRET;
-    if (!secret)
+    // Backend origin, a trailing slash is trimmed (a Vercel env var, like the secret).
+    const backend = process.env.BACKEND_URL?.replace(/\/+$/, "");
+    if (!secret || !backend)
         return new Response("Admin proxy not configured", { status: 500 });
 
     const url = new URL(request.url);
@@ -24,7 +24,7 @@ export default async function middleware(request: Request) {
     headers.set("x-nar-client-ip", request.headers.get("x-real-ip") ?? "");
 
     const hasBody = !["GET", "HEAD"].includes(request.method);
-    return fetch(BACKEND + url.pathname + url.search, {
+    return fetch(backend + url.pathname + url.search, {
         method: request.method,
         headers,
         body: hasBody ? await request.arrayBuffer() : undefined,

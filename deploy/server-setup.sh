@@ -1,6 +1,6 @@
 #!/bin/bash
 # One-time base setup for the Oracle Ubuntu 22.04 server. Safe to re-run.
-#   scp deploy/server-setup.sh ubuntu@nzmpi.duckdns.org: && ssh ubuntu@nzmpi.duckdns.org 'sudo bash server-setup.sh'
+#   scp deploy/server-setup.sh ubuntu@<DOMAIN>: && ssh ubuntu@<DOMAIN> 'sudo bash server-setup.sh'
 # Also open TCP 80 and 443 (and UDP 443) in the Oracle VCN security list; this script only does the host firewall.
 set -euo pipefail
 [ "$(id -u)" = 0 ] || { echo "run with sudo"; exit 1; }
